@@ -29,6 +29,8 @@ export class Player {
     private dashCooldown: number = 0;
     private dashTimer: number = 0;
     private dashDirection: BABYLON.Vector3 = BABYLON.Vector3.Zero();
+    private movementBoundary: number = 100;
+    private obstacles: Array<{ position: BABYLON.Vector3; radius: number }> = [];
 
     constructor(scene: BABYLON.Scene, camera: BABYLON.ArcRotateCamera, position: BABYLON.Vector3) {
         this.scene = scene;
@@ -115,9 +117,24 @@ export class Player {
             this.pushTrailPoint();
         }
 
-        // Boundary constraints
-        this.position.x = Math.max(-100, Math.min(100, this.position.x));
-        this.position.z = Math.max(-100, Math.min(100, this.position.z));
+        // Boundary constraints (use runtime movementBoundary)
+        const b = this.movementBoundary;
+        this.position.x = Math.max(-b, Math.min(b, this.position.x));
+        this.position.z = Math.max(-b, Math.min(b, this.position.z));
+
+        // Obstacle collision: simple push-out from mountain spheres
+        for (const obs of this.obstacles) {
+            const toObs = this.position.subtract(obs.position);
+            const dist = toObs.length();
+            if (dist <= 0.0001) continue;
+            const minDist = this.getRadius() + obs.radius + 0.2; // small padding
+            if (dist < minDist) {
+                const pushDir = toObs.normalize();
+                this.position = obs.position.add(pushDir.scale(minDist));
+                // reduce velocity on collision
+                this.velocity.scaleInPlace(0.2);
+            }
+        }
 
         this.updateMesh();
         this.updateCamera();
@@ -326,5 +343,13 @@ export class Player {
         });
         this.bodySegments = [];
         this.trailPoints = [];
+    }
+
+    public setBoundary(boundary: number): void {
+        this.movementBoundary = Math.max(20, boundary);
+    }
+
+    public setObstacles(obstacles: Array<{ position: BABYLON.Vector3; radius: number }>): void {
+        this.obstacles = obstacles.map(o => ({ position: o.position.clone(), radius: o.radius }));
     }
 }

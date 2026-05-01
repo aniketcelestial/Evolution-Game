@@ -76,6 +76,16 @@ export class MapManager {
 
     private scene: BABYLON.Scene;
     private ground: BABYLON.Mesh | null = null;
+    private mountains: BABYLON.Mesh[] = [];
+
+    public getMountains(): Array<{ position: BABYLON.Vector3; radius: number }> {
+        return this.mountains.map(m => {
+            const info = m.getBoundingInfo();
+            const sphere = info.boundingSphere;
+            const worldCenter = sphere.center.add(m.position);
+            return { position: worldCenter.clone(), radius: sphere.radius * Math.max(m.scaling.x, m.scaling.z) };
+        });
+    }
     private foodManager: FoodManager | null = null;
 
     constructor(scene: BABYLON.Scene) {
@@ -103,14 +113,67 @@ export class MapManager {
         if (this.ground) {
             this.ground.dispose();
         }
-        this.ground = BABYLON.MeshBuilder.CreateGround('map-ground', { width: config.size, height: config.size, subdivisions: 2 }, this.scene);
+        this.ground = BABYLON.MeshBuilder.CreateGround('map-ground', { width: config.size, height: config.size, subdivisions: 4 }, this.scene);
         const groundMaterial = new BABYLON.StandardMaterial('map-ground-material', this.scene);
-        groundMaterial.diffuseColor = BABYLON.Color3.FromHexString('#1a3a4a');
-        groundMaterial.emissiveColor = BABYLON.Color3.FromHexString(`#${config.gridColor.toString(16).padStart(6, '0')}`);
+        // green land look
+        groundMaterial.diffuseColor = BABYLON.Color3.FromHexString('#2b8f4a');
+        groundMaterial.emissiveColor = BABYLON.Color3.FromHexString('#1f6b36');
         groundMaterial.specularColor = BABYLON.Color3.Black();
-        groundMaterial.wireframe = true;
-        groundMaterial.alpha = 0.35;
+        groundMaterial.wireframe = false;
+        groundMaterial.alpha = 1;
         this.ground.material = groundMaterial;
+
+        // Dispose previous mountains
+        this.mountains.forEach(m => m.dispose());
+        this.mountains = [];
+
+        // Place mountains along the map boundary to visually block movement
+        const boundary = config.size / 2;
+        const spacing = Math.max(6, Math.floor(config.size / 28));
+        const mountainCountPerSide = Math.ceil((config.size) / spacing);
+        // Helper: create a low-poly rock mesh
+        const createRock = (name: string, size: number, offset: BABYLON.Vector3) => {
+            const parts: BABYLON.Mesh[] = [];
+            const clusterSize = Math.max(3, Math.round(size / 2));
+            for (let r = 0; r < clusterSize; r++) {
+                const d = 0.5 + Math.random() * 1.2;
+                const mesh = BABYLON.MeshBuilder.CreateBox(`${name}-part-${r}`, { size: d }, this.scene);
+                mesh.scaling = new BABYLON.Vector3(1 + Math.random() * 0.6, 0.6 + Math.random() * 1.2, 1 + Math.random() * 0.8);
+                mesh.position = new BABYLON.Vector3(offset.x + (Math.random() - 0.5) * size * 0.6, offset.y + Math.random() * size * 0.35, offset.z + (Math.random() - 0.5) * size * 0.6);
+                mesh.rotation = new BABYLON.Vector3(Math.random() * 0.4, Math.random() * Math.PI, Math.random() * 0.4);
+                parts.push(mesh);
+            }
+
+            // Merge parts into a single mesh for performance
+            const merged = BABYLON.Mesh.MergeMeshes(parts, true, true, undefined, false, true) as BABYLON.Mesh | null;
+            if (!merged) return null;
+            const mat = new BABYLON.StandardMaterial(`${name}-mat`, this.scene);
+            mat.diffuseColor = BABYLON.Color3.FromHexString('#6b5538');
+            mat.emissiveColor = BABYLON.Color3.FromHexString('#4f3f2d');
+            merged.material = mat;
+            merged.receiveShadows = true;
+            return merged;
+        };
+
+        for (let i = 0; i <= mountainCountPerSide; i++) {
+            const t = -boundary + i * spacing;
+            const northPos = new BABYLON.Vector3(t, 0, -boundary - 6 - Math.random() * 6);
+            const southPos = new BABYLON.Vector3(t, 0, boundary + 6 + Math.random() * 6);
+            const north = createRock(`mountain-n-${i}`, 8 + Math.random() * 12, northPos);
+            const south = createRock(`mountain-s-${i}`, 8 + Math.random() * 12, southPos);
+            if (north) this.mountains.push(north);
+            if (south) this.mountains.push(south);
+        }
+
+        for (let i = 1; i < mountainCountPerSide; i++) {
+            const t = -boundary + i * spacing;
+            const westPos = new BABYLON.Vector3(-boundary - 6 - Math.random() * 6, 0, t);
+            const eastPos = new BABYLON.Vector3(boundary + 6 + Math.random() * 6, 0, t);
+            const west = createRock(`mountain-w-${i}`, 8 + Math.random() * 12, westPos);
+            const east = createRock(`mountain-e-${i}`, 8 + Math.random() * 12, eastPos);
+            if (west) this.mountains.push(west);
+            if (east) this.mountains.push(east);
+        }
 
         console.log(`Loaded map: ${config.name}`);
     }

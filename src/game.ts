@@ -203,8 +203,19 @@ export class Game {
         // Initialize player
         this.player = new Player(scene, camera, new BABYLON.Vector3(0, 1, 0));
 
+        // Configure player movement boundary from map
+        const bounds = this.mapManager.getMapBounds();
+        this.player.setBoundary(bounds.boundary - 6); // leave small padding inside mountains
+        // Provide mountain obstacles so player can't pass through
+        const obstacles = this.mapManager.getMountains();
+        this.player.setObstacles(obstacles);
+
         // Generate initial enemies
         this.enemies = this.mapManager.generateEnemies(15, this.player.stats.level);
+        // give enemies obstacle info
+        for (const e of this.enemies) {
+            e.setObstacles(obstacles);
+        }
 
         // Initialize combat system
         this.combatSystem = new CombatSystem(
@@ -497,6 +508,10 @@ export class Game {
             // Respawn enemies if count drops
             if (this.enemies.length < 10 && this.mapManager) {
                 const newEnemies = this.mapManager.generateEnemies(5, this.player!.stats.level);
+                const obstacles = this.mapManager.getMountains();
+                for (const ne of newEnemies) {
+                    ne.setObstacles(obstacles);
+                }
                 this.enemies.push(...newEnemies);
             }
 

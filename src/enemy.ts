@@ -23,6 +23,7 @@ export class Enemy {
     private scene: BABYLON.Scene;
     private targetPosition: BABYLON.Vector3;
     private moveTimer: number = 0;
+    private obstacles: Array<{ position: BABYLON.Vector3; radius: number }> = [];
 
     constructor(scene: BABYLON.Scene, position: BABYLON.Vector3, level: number, species?: string) {
         this.scene = scene;
@@ -163,6 +164,20 @@ export class Enemy {
         this.velocity = direction.scale(this.stats.speed);
         this.position.addInPlace(this.velocity.scale(deltaTime));
 
+        // Obstacle collision avoidance: push out of mountain spheres
+        for (const obs of this.obstacles) {
+            const toObs = this.position.subtract(obs.position);
+            const dist = toObs.length();
+            if (dist <= 0.0001) continue;
+            const minDist = this.getRadius() + obs.radius + 0.2;
+            if (dist < minDist) {
+                const pushDir = toObs.normalize();
+                this.position = obs.position.add(pushDir.scale(minDist));
+                // reduce velocity to avoid jitter
+                this.velocity.scaleInPlace(0.3);
+            }
+        }
+
         // Boundary constraints
         this.position.x = Math.max(-100, Math.min(100, this.position.x));
         this.position.z = Math.max(-100, Math.min(100, this.position.z));
@@ -217,5 +232,9 @@ export class Enemy {
 
     public dispose(): void {
         this.mesh.dispose();
+    }
+
+    public setObstacles(obstacles: Array<{ position: BABYLON.Vector3; radius: number }>): void {
+        this.obstacles = obstacles.map(o => ({ position: o.position.clone(), radius: o.radius }));
     }
 }
