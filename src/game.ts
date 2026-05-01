@@ -1,0 +1,438 @@
+import * as THREE from 'three';
+import { Scene3D } from './scene';
+import { UIManager } from './ui';
+import { Player } from './player';
+import { Enemy } from './enemy';
+import { FoodManager } from './food';
+import { CombatSystem } from './combat';
+import { LevelProgressionSystem } from './levelSystem';
+import { MapManager } from './mapManager';
+import { MobileControls, MapView } from './mobile';
+
+export class Game {
+    private scene3D: Scene3D | null = null;
+    private uiManager: UIManager | null = null;
+    private player: Player | null = null;
+    private enemies: Enemy[] = [];
+    private foodManager: FoodManager | null = null;
+    private combatSystem: CombatSystem | null = null;
+    private levelSystem: LevelProgressionSystem;
+    private mapManager: MapManager | null = null;
+    private mobileControls: MobileControls | null = null;
+    private mapView: MapView | null = null;
+    private animationFrameId: number | null = null;
+    
+    private isRunning: boolean = false;
+    private isPaused: boolean = false;
+    private gameTime: number = 0;
+    private simulationSpeed: number = 1;
+    
+    // Input handling
+    private input = {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+    };
+
+    constructor() {
+        this.levelSystem = new LevelProgressionSystem();
+    }
+
+    async init(): Promise<void> {
+        try {
+            // Show loading screen
+            this.showScreen('loading-screen');
+
+            // Initialize Three.js scene
+            this.scene3D = new Scene3D();
+            await this.scene3D.init();
+
+            // Initialize UI Manager
+            this.uiManager = new UIManager();
+            this.setupUIListeners();
+            this.setupInputListeners();
+
+            // Hide loading screen and show main menu
+            this.hideScreen('loading-screen');
+            this.showScreen('main-menu');
+
+            // Start the animation loop
+            this.animate();
+        } catch (error) {
+            console.error('Failed to initialize game:', error);
+            alert('Failed to initialize game. Check console for details.');
+        }
+    }
+
+    private setupInputListeners(): void {
+        window.addEventListener('keydown', (e) => {
+            switch (e.key.toUpperCase()) {
+                case 'W':
+                case 'ARROWUP':
+                    this.input.up = true;
+                    break;
+                case 'S':
+                case 'ARROWDOWN':
+                    this.input.down = true;
+                    break;
+                case 'A':
+                case 'ARROWLEFT':
+                    this.input.left = true;
+                    break;
+                case 'D':
+                case 'ARROWRIGHT':
+                    this.input.right = true;
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch (e.key.toUpperCase()) {
+                case 'W':
+                case 'ARROWUP':
+                    this.input.up = false;
+                    break;
+                case 'S':
+                case 'ARROWDOWN':
+                    this.input.down = false;
+                    break;
+                case 'A':
+                case 'ARROWLEFT':
+                    this.input.left = false;
+                    break;
+                case 'D':
+                case 'ARROWRIGHT':
+                    this.input.right = false;
+                    break;
+            }
+        });
+    }
+
+    private setupUIListeners(): void {
+        // Main Menu
+        document.getElementById('start-btn')?.addEventListener('click', () => {
+            this.startGame();
+        });
+
+        document.getElementById('settings-btn')?.addEventListener('click', () => {
+            this.showScreen('settings-screen');
+            this.hideScreen('main-menu');
+        });
+
+        document.getElementById('about-btn')?.addEventListener('click', () => {
+            this.showScreen('about-screen');
+            this.hideScreen('main-menu');
+        });
+
+        // Settings
+        document.getElementById('settings-back-btn')?.addEventListener('click', () => {
+            this.showScreen('main-menu');
+            this.hideScreen('settings-screen');
+        });
+
+        // About
+        document.getElementById('about-back-btn')?.addEventListener('click', () => {
+            this.showScreen('main-menu');
+            this.hideScreen('about-screen');
+        });
+
+        // Game HUD Controls
+        document.getElementById('pause-btn')?.addEventListener('click', () => {
+            this.togglePause();
+        });
+
+        document.getElementById('menu-btn')?.addEventListener('click', () => {
+            this.returnToMenu();
+        });
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            this.scene3D?.onWindowResize();
+        });
+    }
+
+    private startGame(): void {
+        this.hideScreen('main-menu');
+        this.showScreen('game-hud');
+        this.isRunning = true;
+        this.isPaused = false;
+        this.gameTime = 0;
+
+        // Initialize map manager
+        this.mapManager = new MapManager(this.scene3D!.getScene());
+        this.mapManager.loadMap(0, this.foodManager!);
+
+        // Initialize player
+        const camera = this.scene3D!.getCamera();
+        this.player = new Player(this.scene3D!.getScene(), camera, new THREE.Vector3(0, 1, 0));
+
+        // Initialize food manager
+        this.foodManager = new FoodManager(this.scene3D!.getScene());
+
+        // Generate initial enemies
+        this.enemies = this.mapManager.generateEnemies(15, this.player.stats.level);
+
+        // Initialize combat system
+        this.combatSystem = new CombatSystem(
+            this.player,
+            this.enemies,
+            this.foodManager,
+            this.scene3D!.getScene()
+        );
+
+        // Initialize mobile controls
+        this.mobileControls = new MobileControls();
+        this.mobileControls.show();
+
+        // Initialize map view
+        try {
+            this.mapView = new MapView('map-view');
+            this.mapView.show();
+        } catch (e) {
+            console.warn('Map view not available:', e);
+        }
+
+        // Setup mobile map button
+        document.getElementById('map-btn')?.classList.add('active');
+        document.getElementById('map-btn')?.addEventListener('click', () => {
+            const container = document.getElementById('map-view-container');
+            if (container?.classList.contains('active')) {
+                container.classList.remove('active');
+            } else {
+                container?.classList.add('active');
+            }
+        });
+
+        // Setup close map button
+        document.getElementById('close-map-btn')?.addEventListener('click', () => {
+            document.getElementById('map-view-container')?.classList.remove('active');
+        });
+    }
+
+    private togglePause(): void {
+        this.isPaused = !this.isPaused;
+        const btn = document.getElementById('pause-btn');
+        if (btn) {
+            btn.textContent = this.isPaused ? 'Resume' : 'Pause';
+        }
+    }
+
+    private returnToMenu(): void {
+        this.isRunning = false;
+        this.isPaused = false;
+        this.showScreen('main-menu');
+        this.hideScreen('game-hud');
+        
+        // Hide mobile controls
+        this.mobileControls?.hide();
+        this.mapView?.hide();
+        document.getElementById('map-btn')?.classList.remove('active');
+        document.getElementById('map-view-container')?.classList.remove('active');
+        
+        // Cleanup
+        this.player?.dispose();
+        this.enemies.forEach(e => e.dispose());
+        this.enemies = [];
+        this.foodManager?.dispose();
+        this.mapManager?.dispose();
+        
+        this.player = null;
+        this.foodManager = null;
+        this.combatSystem = null;
+        this.mapManager = null;
+        this.mobileControls = null;
+        this.mapView = null;
+    }
+
+    private showScreen(screenId: string): void {
+        const screen = document.getElementById(screenId);
+        if (screen) {
+            screen.classList.add('active');
+        }
+    }
+
+    private hideScreen(screenId: string): void {
+        const screen = document.getElementById(screenId);
+        if (screen) {
+            screen.classList.remove('active');
+        }
+    }
+
+    private updateHUD(): void {
+        if (!this.player) return;
+
+        // Update stats
+        const levelEl = document.getElementById('player-level');
+        const healthEl = document.getElementById('player-health');
+        const expEl = document.getElementById('player-exp');
+        const mapEl = document.getElementById('current-map');
+        const enemyCountEl = document.getElementById('enemy-count');
+        const timeEl = document.getElementById('time-elapsed');
+
+        if (levelEl) levelEl.textContent = this.player.stats.level.toString();
+        
+        if (healthEl) {
+            const healthPercent = (this.player.stats.health / this.player.stats.maxHealth) * 100;
+            healthEl.textContent = `${Math.ceil(this.player.stats.health)} / ${this.player.stats.maxHealth}`;
+            const healthBar = document.getElementById('health-bar');
+            if (healthBar) {
+                healthBar.style.width = healthPercent + '%';
+                healthBar.style.backgroundColor = healthPercent > 50 ? '#00ff00' : healthPercent > 25 ? '#ffaa00' : '#ff4444';
+            }
+        }
+
+        if (expEl) {
+            const expPercent = (this.player.stats.experience / this.player.stats.experienceNeeded) * 100;
+            expEl.textContent = `${Math.floor(this.player.stats.experience)} / ${this.player.stats.experienceNeeded}`;
+            const expBar = document.getElementById('exp-bar');
+            if (expBar) {
+                expBar.style.width = expPercent + '%';
+            }
+        }
+
+        if (mapEl && this.mapManager) {
+            const mapName = this.levelSystem.getMapNameForLevel(this.player.stats.level);
+            mapEl.textContent = mapName;
+        }
+
+        if (enemyCountEl) {
+            enemyCountEl.textContent = this.enemies.filter(e => e.isAlive()).length.toString();
+        }
+
+        if (timeEl) {
+            const minutes = Math.floor(this.gameTime / 60);
+            const seconds = Math.floor(this.gameTime % 60);
+            timeEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    private checkMapTransition(): void {
+        if (!this.player || !this.mapManager) return;
+
+        const newMapIndex = this.levelSystem.getMapIndexForLevel(this.player.stats.level);
+        if (newMapIndex !== this.mapManager.getCurrentMapIndex()) {
+            // Transition to new map
+            console.log(`Transitioning to map ${newMapIndex}`);
+            this.mapManager.loadMap(newMapIndex, this.foodManager!);
+            
+            // Respawn enemies for new map
+            this.enemies.forEach(e => e.dispose());
+            this.enemies = this.mapManager.generateEnemies(
+                15 + newMapIndex * 5,
+                this.player.stats.level
+            );
+            
+            // Reset combat system
+            this.combatSystem = new CombatSystem(
+                this.player,
+                this.enemies,
+                this.foodManager!,
+                this.scene3D!.getScene()
+            );
+        }
+    }
+
+    private animate = (): void => {
+        this.animationFrameId = requestAnimationFrame(this.animate);
+
+        if (this.isRunning && !this.isPaused) {
+            const deltaTime = (1 / 60) * this.simulationSpeed;
+            
+            // Merge keyboard and touch input
+            if (this.mobileControls) {
+                const touchInput = this.mobileControls.touchInput;
+                this.input = {
+                    up: this.input.up || touchInput.up,
+                    down: this.input.down || touchInput.down,
+                    left: this.input.left || touchInput.left,
+                    right: this.input.right || touchInput.right,
+                };
+
+                // Update camera rotation from touch
+                const cameraRot = this.mobileControls.getCameraRotation();
+                this.scene3D?.updateCameraRotation(cameraRot.x, cameraRot.y);
+            }
+
+            // Update player
+            this.player?.update(deltaTime, this.input);
+
+            // Reset input for next frame (keyboard is updated by events)
+            // Touch input is handled by MobileControls
+
+            // Update enemies
+            for (let i = this.enemies.length - 1; i >= 0; i--) {
+                const enemy = this.enemies[i];
+                if (enemy.isAlive()) {
+                    enemy.update(deltaTime, this.player!.getPosition());
+                } else {
+                    enemy.dispose();
+                    this.enemies.splice(i, 1);
+                }
+            }
+
+            // Update food
+            this.foodManager?.update(deltaTime);
+
+            // Combat/collision detection
+            this.combatSystem?.update();
+
+            // Check if player is dead
+            if (!this.player?.isAlive()) {
+                this.gameOverEvent();
+            }
+
+            // Respawn enemies if count drops
+            if (this.enemies.length < 10 && this.mapManager) {
+                const newEnemies = this.mapManager.generateEnemies(5, this.player!.stats.level);
+                this.enemies.push(...newEnemies);
+            }
+
+            // Check for map transitions
+            this.checkMapTransition();
+
+            // Update game time
+            this.gameTime += deltaTime;
+
+            // Update HUD every frame
+            this.updateHUD();
+
+            // Update map view
+            if (this.mapView && this.player) {
+                const foods = this.foodManager?.getFoods().map(f => ({
+                    position: f.position
+                })) || [];
+                const enemiesData = this.enemies.map(e => ({
+                    position: e.position,
+                    alive: e.isAlive()
+                }));
+                const mapSize = this.mapManager?.getMapBounds().size || 200;
+                this.mapView.updateMap(this.player.getPosition(), enemiesData, foods, mapSize);
+            }
+        }
+
+        // Render scene
+        this.scene3D?.render();
+    };
+
+    private gameOverEvent(): void {
+        this.isRunning = false;
+        alert(`Game Over! You reached level ${this.player?.stats.level}`);
+        this.returnToMenu();
+    }
+
+    public getScene(): THREE.Scene | null {
+        return this.scene3D?.getScene() || null;
+    }
+
+    public dispose(): void {
+        if (this.animationFrameId !== null) {
+            cancelAnimationFrame(this.animationFrameId);
+        }
+        this.player?.dispose();
+        this.enemies.forEach(e => e.dispose());
+        this.foodManager?.dispose();
+        this.mapManager?.dispose();
+        this.scene3D?.dispose();
+    }
+}

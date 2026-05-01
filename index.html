@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="true">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Evolution Slither">
+    <meta name="theme-color" content="#0a0e27">
+    <title>Evolution Slither</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+    
+    <!-- Main Menu Screen -->
+    <div id="main-menu" class="screen active">
+        <div class="menu-container">
+            <h1 class="title">Evolution Simulator</h1>
+            <p class="subtitle">Watch creatures evolve and adapt</p>
+            
+            <div class="menu-buttons">
+                <button id="start-btn" class="btn btn-primary">Start Simulation</button>
+                <button id="settings-btn" class="btn btn-secondary">Settings</button>
+                <button id="about-btn" class="btn btn-secondary">About</button>
+            </div>
+            <p class="developer-credit">Developer: Aniket Verma</p>
+        </div>
+    </div>
+
+    <!-- Settings Screen -->
+    <div id="settings-screen" class="screen">
+        <div class="settings-container">
+            <h1>Settings</h1>
+            
+            <div class="settings-group">
+                <label for="difficulty">Difficulty:</label>
+                <select id="difficulty">
+                    <option value="easy">Easy (Slower enemies)</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="hard">Hard (Aggressive enemies)</option>
+                </select>
+            </div>
+
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="show-grid" checked>
+                    Show Grid
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="show-debug" unchecked>
+                    Show Debug Info
+                </label>
+            </div>
+
+            <div class="settings-buttons">
+                <button id="settings-back-btn" class="btn btn-secondary">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Screen -->
+    <div id="about-screen" class="screen">
+        <div class="about-container">
+            <h1>About</h1>
+            <p>Evolution Simulator is a 3D simulation game where creatures evolve and adapt to their environment.</p>
+            
+            <h2>Features</h2>
+            <ul>
+                <li>3D Environment</li>
+                <li>Creature Evolution</li>
+                <li>Natural Selection</li>
+                <li>Real-time Statistics</li>
+            </ul>
+
+            <p class="version">Version 1.0.0</p>
+            <p class="developer-credit">Developer: Aniket Verma</p>
+            
+            <button id="about-back-btn" class="btn btn-secondary">Back</button>
+        </div>
+    </div>
+
+    <!-- Game HUD (In-Game UI) -->
+    <div id="game-hud" class="hud">
+        <div class="hud-stats">
+            <div class="stat">
+                <span class="label">Level:</span>
+                <span id="player-level" class="value">1</span>
+            </div>
+            <div class="stat">
+                <span class="label">Health:</span>
+                <div class="health-bar">
+                    <div id="health-bar" class="bar"></div>
+                </div>
+                <span id="player-health" class="value-small">100 / 100</span>
+            </div>
+            <div class="stat">
+                <span class="label">Experience:</span>
+                <div class="exp-bar">
+                    <div id="exp-bar" class="bar"></div>
+                </div>
+                <span id="player-exp" class="value-small">0 / 100</span>
+            </div>
+            <div class="stat">
+                <span class="label">Map:</span>
+                <span id="current-map" class="value">Starter Map</span>
+            </div>
+            <div class="stat">
+                <span class="label">Enemies:</span>
+                <span id="enemy-count" class="value">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">Time:</span>
+                <span id="time-elapsed" class="value">0:00</span>
+            </div>
+        </div>
+
+        <div class="hud-controls">
+            <button id="pause-btn" class="btn-small">Pause</button>
+            <button id="menu-btn" class="btn-small">Menu</button>
+        </div>
+    </div>
+
+    <!-- Mobile Touch Controls -->
+    <div id="joystick-container" class="joystick-container">
+        <div class="joystick-base">
+            <div class="joystick"></div>
+        </div>
+    </div>
+
+    <!-- Map View -->
+    <div id="map-view-container" class="map-view-container">
+        <div class="map-header">
+            <span class="map-title">Map</span>
+            <button id="close-map-btn" class="close-btn">✕</button>
+        </div>
+        <canvas id="map-view" class="map-canvas"></canvas>
+    </div>
+
+    <!-- Mobile Menu Button for Map -->
+    <button id="map-btn" class="mobile-btn map-btn">📍 Map</button>
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="screen">
+        <div class="loading-container">
+            <h1>Loading...</h1>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script type="module" src="src/main.ts"></script>
+</body>
+</html>
