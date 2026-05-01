@@ -146,36 +146,45 @@ export class MobileControls {
     private handleJoystickTouchStart(event: TouchEvent): void {
         this.isDragging = true;
         const touch = event.touches[0];
+
+        // Recompute joystick center using current layout (handles transforms/rotation)
+        const rect = this.joystickBase.getBoundingClientRect();
+        this.joystickCenterX = rect.left + rect.width / 2;
+        this.joystickCenterY = rect.top + rect.height / 2;
+        // adapt maxDistance to base radius for more accurate control
+        this.joystickRadius = rect.width / 2;
+        this.maxDistance = Math.max(30, Math.min(this.joystickRadius * 0.9, 80));
+
         this.touchStartX = touch.clientX;
         this.touchStartY = touch.clientY;
+
+        // Process immediately to reflect initial touch direction
+        this.handleJoystickTouchMove(event);
     }
 
     private handleJoystickTouchMove(event: TouchEvent): void {
         if (!this.isDragging) return;
-
         event.preventDefault();
         const touch = event.touches[0];
 
+        // Use client coordinates and current center
         const deltaX = touch.clientX - this.joystickCenterX;
         const deltaY = touch.clientY - this.joystickCenterY;
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const distance = Math.hypot(deltaX, deltaY);
 
-        let moveX = deltaX;
-        let moveY = deltaY;
-
-        // Constrain to max distance
-        if (distance > this.maxDistance) {
-            const ratio = this.maxDistance / distance;
-            moveX *= ratio;
-            moveY *= ratio;
-        }
+        // Compute move vector clamped to maxDistance
+        const effectiveMax = this.maxDistance || Math.max(40, this.joystickRadius * 0.6);
+        let ratio = 1;
+        if (distance > effectiveMax) ratio = effectiveMax / distance;
+        const moveX = deltaX * ratio;
+        const moveY = deltaY * ratio;
 
         // Update joystick visual position
         this.joystick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
 
-        // Update input based on position
-        this.touchInput.moveX = moveX / this.maxDistance;
-        this.touchInput.moveY = -moveY / this.maxDistance;
+        // Update input based on position (normalized to effectiveMax)
+        this.touchInput.moveX = moveX / effectiveMax;
+        this.touchInput.moveY = -moveY / effectiveMax;
     }
 
     private handleJoystickTouchEnd(event: TouchEvent): void {

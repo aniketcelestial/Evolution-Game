@@ -1,5 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 import { PlayerControlInput } from './controls';
+import { createSlitherTube } from './modelFactory';
 
 export interface PlayerStats {
     level: number;
@@ -22,8 +23,9 @@ export class Player {
     private evolved: boolean = false;
     
     private mesh: BABYLON.Mesh;
-    private bodySegments: BABYLON.Mesh[] = [];
+    private bodySegmentCount: number = 0;
     private trailPoints: BABYLON.Vector3[] = [];
+    private slitherMesh: BABYLON.Mesh | null = null;
     private scene: BABYLON.Scene;
     private camera: BABYLON.ArcRotateCamera;
     private dashCooldown: number = 0;
@@ -66,18 +68,9 @@ export class Player {
     }
 
     private buildBodySegments(): void {
+        // Use a simple segment count; visual is rendered as a smooth tube.
         const segmentCount = 14;
-        for (let i = 0; i < segmentCount; i++) {
-            const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-${i}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
-            const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-${i}`, this.scene);
-            segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
-            segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
-            segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
-            segment.material = segmentMaterial;
-            segment.receiveShadows = true;
-            this.bodySegments.push(segment);
-        }
-
+        this.bodySegmentCount = segmentCount;
         const initialPoint = this.position.clone();
         for (let i = 0; i < segmentCount * 8; i++) {
             this.trailPoints.push(initialPoint.clone());
@@ -156,82 +149,45 @@ export class Player {
         headMaterial.diffuseColor = color;
         headMaterial.emissiveColor = color.scale(0.35);
 
-        this.updateBodySegments(color);
+        this.updateSlitherMesh(color);
     }
 
     private pushTrailPoint(): void {
         this.trailPoints.unshift(this.position.clone());
-        const maxTrailPoints = Math.max(64, this.bodySegments.length * 10);
+        const maxTrailPoints = Math.max(64, this.bodySegmentCount * 10);
         if (this.trailPoints.length > maxTrailPoints) {
             this.trailPoints.length = maxTrailPoints;
         }
     }
 
-    private updateBodySegments(color: BABYLON.Color3): void {
-        const spacing = 7;
-        const swayPhase = performance.now() * 0.006;
-        const velocityStrength = Math.min(1, this.velocity.length() / Math.max(1, this.stats.speed));
-
-        // Compute forward direction from facingAngle; fallback to camera facing if idle.
-        let forward = new BABYLON.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
-        if (forward.lengthSquared() < 0.0001) {
-            forward = new BABYLON.Vector3(Math.sin(this.camera.alpha), 0, Math.cos(this.camera.alpha));
+    private updateSlitherMesh(color: BABYLON.Color3): void {
+        // sample trailPoints to create a short path for the tube mesh
+        const maxSegmentsToShow = Math.max(6, this.bodySegmentCount);
+        const pointsToUse = Math.min(this.trailPoints.length, maxSegmentsToShow * 6);
+        const path: BABYLON.Vector3[] = [];
+        const spacing = Math.max(1, Math.floor(this.trailPoints.length / Math.max(6, pointsToUse)));
+        for (let i = 0; i < pointsToUse; i += spacing) {
+            const p = this.trailPoints[i] || this.position;
+            path.push(new BABYLON.Vector3(p.x, p.y + 0.02, p.z));
         }
-        if (forward.lengthSquared() > 0.0001) {
-            forward.normalize();
+        // ensure head point is included
+        path.unshift(this.position.clone());
+
+        if (this.slitherMesh) {
+            try { this.slitherMesh.dispose(); } catch (e) {}
+            this.slitherMesh = null;
         }
 
-        for (let i = 0; i < this.bodySegments.length; i++) {
-            const segment = this.bodySegments[i];
-            const trailIndex = Math.min(this.trailPoints.length - 1, i * spacing + 1);
-            const trailTarget = this.trailPoints[trailIndex];
-
-            // When moving, prefer trail-following. When idle, build a resting slither using forward offsets.
-            let target: BABYLON.Vector3;
-            if (trailTarget && (this.velocity.lengthSquared() > 0.0001 || this.trailPoints.some(p => !p.equals(this.position)))) {
-                target = trailTarget;
-            } else {
-                // resting layout along forward vector
-                const distance = (i + 1) * (0.4 + this.stats.size * 0.05);
-                target = this.position.add(forward.scale(-distance));
-            }
-
-            // Sway oscillation: larger when idle
-            const idleFactor = 1 - velocityStrength;
-            const lateralOffset = Math.sin(swayPhase + i * 0.45) * (0.18 * idleFactor + velocityStrength * 0.06 + i * 0.005);
-            const verticalOffset = Math.cos(swayPhase + i * 0.35) * (0.06 * idleFactor + 0.02 * velocityStrength);
-
-            segment.position.copyFrom(target);
-            // apply lateral offset perpendicular to forward
-            const lateral = new BABYLON.Vector3(-forward.z, 0, forward.x).scale(lateralOffset);
-            segment.position.addInPlace(lateral);
-            segment.position.y = target.y + verticalOffset;
-
-            const scaleFactor = Math.max(0.28, (this.stats.size * 0.9) * (1 - i / (this.bodySegments.length * 1.15)));
-            segment.scaling.setAll(scaleFactor);
-
-            // rotate segment to follow forward direction
-            segment.rotation.y = Math.atan2(forward.x, forward.z || 0.0001);
-
-            const segmentMaterial = segment.material as BABYLON.StandardMaterial;
-            const fade = 1 - i / (this.bodySegments.length + 2);
-            segmentMaterial.diffuseColor = BABYLON.Color3.Lerp(color, BABYLON.Color3.FromHexString('#05250c'), 1 - fade * 0.9);
-            segmentMaterial.emissiveColor = color.scale(0.2 * fade);
+        if (path.length >= 2) {
+            this.slitherMesh = createSlitherTube(this.scene, path, this.stats.size, `player-slither-${Date.now()}`);
+            const mat = this.slitherMesh.material as BABYLON.StandardMaterial;
+            mat.diffuseColor = color;
+            mat.emissiveColor = color.scale(0.25);
         }
     }
 
     private addSegment(): void {
-        const idx = this.bodySegments.length;
-        const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-grow-${idx}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
-        const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-grow-${idx}`, this.scene);
-        segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
-        segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
-        segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
-        segment.material = segmentMaterial;
-        segment.receiveShadows = true;
-        this.bodySegments.push(segment);
-
-        // increase trail buffer so segments have places to follow
+        this.bodySegmentCount += 1;
         for (let i = 0; i < 8; i++) {
             this.trailPoints.push(this.position.clone());
         }
@@ -250,12 +206,12 @@ export class Player {
         this.stats.speed += 4;
         this.stats.maxHealth += 30;
         this.stats.health = Math.min(this.stats.maxHealth, this.stats.health + 30);
-
-        // scale segments to look like an ant body (more tapered)
-        this.bodySegments.forEach((s, i) => {
-            const sf = 0.35 * (1 - i / Math.max(1, this.bodySegments.length));
-            s.scaling.setAll(sf);
-        });
+        // visually the slither will be thinner and more tapered when ant-evolved
+        if (this.slitherMesh && this.slitherMesh.material) {
+            const mat = this.slitherMesh.material as BABYLON.StandardMaterial;
+            mat.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
+            mat.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
+        }
     }
 
     private updateCamera(): void {
@@ -284,15 +240,8 @@ export class Player {
         this.stats.attack += 2;
         this.stats.experienceNeeded = Math.floor(this.stats.experienceNeeded * 1.1);
 
-        if (this.bodySegments.length < 24) {
-            const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-bonus-${this.bodySegments.length}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
-            const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-bonus-${this.bodySegments.length}`, this.scene);
-            segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
-            segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
-            segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
-            segment.material = segmentMaterial;
-            segment.receiveShadows = true;
-            this.bodySegments.push(segment);
+        if (this.bodySegmentCount < 24) {
+            this.bodySegmentCount += 1;
         }
 
         this.updateMesh();
@@ -338,10 +287,10 @@ export class Player {
     public dispose(): void {
         this.mesh.dispose();
 
-        this.bodySegments.forEach(segment => {
-            segment.dispose();
-        });
-        this.bodySegments = [];
+        if (this.slitherMesh) {
+            try { this.slitherMesh.dispose(); } catch (e) {}
+            this.slitherMesh = null;
+        }
         this.trailPoints = [];
     }
 

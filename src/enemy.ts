@@ -1,4 +1,5 @@
 import * as BABYLON from '@babylonjs/core';
+import { createAntModel, createBeeModel, createSnakeModel, createSlitherTube } from './modelFactory';
 
 export interface EnemyStats {
     level: number;
@@ -19,7 +20,7 @@ export class Enemy {
     public species: string = 'generic';
     public actionPoints: number = 1;
     
-    private mesh: BABYLON.Mesh;
+    private mesh: BABYLON.AbstractMesh | BABYLON.TransformNode;
     private scene: BABYLON.Scene;
     private targetPosition: BABYLON.Vector3;
     private moveTimer: number = 0;
@@ -91,49 +92,26 @@ export class Enemy {
     }
 
     private createMesh(): BABYLON.Mesh {
-        // Different visuals per species
-        let mesh: BABYLON.Mesh;
-        const mat = new BABYLON.StandardMaterial('enemy-material', this.scene);
-
+        // Use the model factory to produce more accurate visuals per species.
         switch (this.species) {
             case 'ant':
-                mesh = BABYLON.MeshBuilder.CreateCylinder('enemy-ant', { diameterTop: this.radius * 0.8, diameterBottom: this.radius * 0.8, height: this.radius * 1.4, tessellation: 12 }, this.scene);
-                mat.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
-                mat.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
-                break;
+                return createAntModel(this.scene, this.stats.size, `enemy-ant-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
             case 'bee':
-                mesh = BABYLON.MeshBuilder.CreateSphere('enemy-bee', { diameter: this.radius * 1.2, segments: 12 }, this.scene);
-                mat.diffuseColor = BABYLON.Color3.FromHexString('#ffd24d');
-                mat.emissiveColor = BABYLON.Color3.FromHexString('#ffb600');
-                // small wings
-                const wingL = BABYLON.MeshBuilder.CreateBox('wingL', { width: this.radius * 0.4, height: 0.02, depth: this.radius * 0.8 }, this.scene);
-                const wingR = wingL.clone('wingR');
-                wingL.position.set(-this.radius * 0.4, 0.1, 0);
-                wingR.position.set(this.radius * 0.4, 0.1, 0);
-                wingL.parent = mesh;
-                wingR.parent = mesh;
-                break;
+                return createBeeModel(this.scene, this.stats.size, `enemy-bee-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
             case 'slither':
-                mesh = BABYLON.MeshBuilder.CreateSphere('enemy-slither', { diameter: this.radius * 1.4, segments: 12 }, this.scene);
-                mat.diffuseColor = BABYLON.Color3.FromHexString('#2aa65b');
-                mat.emissiveColor = BABYLON.Color3.FromHexString('#188a3b');
-                mesh.scaling.x = 1.8;
-                mesh.scaling.z = 0.9;
-                break;
+                // simple tapered tube for small slither enemy
+                const slitherRoot = createSlitherTube(this.scene, [new BABYLON.Vector3(0,0,0), new BABYLON.Vector3(-0.8,0,0)], this.stats.size, `enemy-slither-${Math.floor(Math.random() * 10000)}`);
+                return slitherRoot as unknown as BABYLON.Mesh;
             case 'snake':
-                mesh = BABYLON.MeshBuilder.CreateTorus('enemy-snake', { diameter: this.radius * 1.4, thickness: this.radius * 0.35, tessellation: 24 }, this.scene);
-                mat.diffuseColor = BABYLON.Color3.FromHexString('#8b2b2b');
-                mat.emissiveColor = BABYLON.Color3.FromHexString('#5a1a1a');
-                break;
+                return createSnakeModel(this.scene, 8, this.stats.size, `enemy-snake-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
             default:
-                mesh = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
+                const fallback = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
+                const mat = new BABYLON.StandardMaterial('enemy-material', this.scene);
                 mat.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
-                mat.emissiveColor = BABYLON.Color3.FromHexString('#990000');
+                fallback.material = mat;
+                fallback.receiveShadows = true;
+                return fallback;
         }
-
-        mesh.material = mat;
-        mesh.receiveShadows = true;
-        return mesh;
     }
 
     public update(deltaTime: number, playerPos: BABYLON.Vector3): void {
@@ -189,32 +167,18 @@ export class Enemy {
     }
 
     private updateMesh(): void {
-        this.mesh.position.copyFrom(this.position);
-        // scale by species-aware size
-        this.mesh.scaling = new BABYLON.Vector3(this.stats.size, this.stats.size, this.stats.size);
+        if ((this.mesh as any).position) {
+            (this.mesh as any).position.copyFrom(this.position);
+        } else if ((this.mesh as BABYLON.TransformNode).getChildren) {
+            // TransformNode: set its position
+            (this.mesh as BABYLON.TransformNode).position.copyFrom(this.position);
+        }
 
-        // Color variations per species
-        const material = this.mesh.material as BABYLON.StandardMaterial;
-        switch (this.species) {
-            case 'ant':
-                material.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
-                material.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
-                break;
-            case 'bee':
-                material.diffuseColor = BABYLON.Color3.FromHexString('#ffd24d');
-                material.emissiveColor = BABYLON.Color3.FromHexString('#ffb600');
-                break;
-            case 'slither':
-                material.diffuseColor = BABYLON.Color3.FromHexString('#2aa65b');
-                material.emissiveColor = BABYLON.Color3.FromHexString('#188a3b');
-                break;
-            case 'snake':
-                material.diffuseColor = BABYLON.Color3.FromHexString('#8b2b2b');
-                material.emissiveColor = BABYLON.Color3.FromHexString('#5a1a1a');
-                break;
-            default:
-                material.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
-                material.emissiveColor = BABYLON.Color3.FromHexString('#990000');
+        // Uniformly scale root models by stats.size
+        try {
+            (this.mesh as any).scaling = new BABYLON.Vector3(this.stats.size, this.stats.size, this.stats.size);
+        } catch (e) {
+            // ignore
         }
     }
 
