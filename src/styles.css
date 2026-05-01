@@ -20,6 +20,20 @@ html, body, #canvas-container {
     height: 100%;
 }
 
+html, body {
+    overflow: hidden;
+}
+
+#app-shell {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    transform: none;
+    transform-origin: top left;
+}
+
 #canvas-container {
     position: absolute;
     top: 0;
@@ -779,64 +793,20 @@ html, body, #canvas-container {
 }
 
 @media (max-width: 900px) and (orientation: portrait) {
-    .rotate-device-overlay {
-        display: flex;
-    }
-
-    .screen,
-    .hud,
-    .joystick-container,
-    .mobile-action-panel,
-    .mobile-btn,
-    .map-view-container {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    #app-shell {
+        width: 100vh;
+        height: 100vw;
+        transform: rotate(90deg) translateY(-100%);
+        transform-origin: top left;
     }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
-    .rotate-device-overlay {
-        display: none;
-    }
-
     .hud-stats {
         max-width: 48vw;
     }
 }
 
-.rotate-device-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 2rem;
-    background: radial-gradient(circle at center, rgba(0, 212, 255, 0.16), rgba(5, 8, 20, 0.96));
-    color: #e8fbff;
-}
-
-.rotate-device-card {
-    max-width: 320px;
-    padding: 1.5rem 1.25rem;
-    border-radius: 18px;
-    border: 1px solid rgba(0, 212, 255, 0.35);
-    background: rgba(10, 18, 38, 0.82);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-}
-
-.rotate-device-title {
-    font-size: 1.3rem;
-    font-weight: 700;
-    margin-bottom: 0.6rem;
-}
-
-.rotate-device-text {
-    font-size: 0.95rem;
-    color: #b9d7e4;
-    line-height: 1.5;
-}
 
 /* Landscape mode adjustments */
 @media (max-width: 800px) and (max-height: 500px) {

@@ -11,151 +11,133 @@
     <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
-    <div class="rotate-device-overlay" aria-hidden="true">
-        <div class="rotate-device-card">
-            <div class="rotate-device-title">Rotate your phone</div>
-            <div class="rotate-device-text">Landscape mode gives you more room for movement, buttons, and combat.</div>
-        </div>
-    </div>
+    <div id="app-shell">
+        <div id="canvas-container"></div>
 
-    <!-- 3D Canvas Container -->
-    <div id="canvas-container"></div>
-    
-    <!-- Main Menu Screen -->
-    <div id="main-menu" class="screen active">
-        <div class="menu-container">
-            <h1 class="title">Evolution Simulator</h1>
-            <p class="subtitle">Watch creatures evolve and adapt</p>
-            
-            <div class="menu-buttons">
-                <button id="start-btn" class="btn btn-primary">Start Simulation</button>
-                <button id="settings-btn" class="btn btn-secondary">Settings</button>
-                <button id="about-btn" class="btn btn-secondary">About</button>
-            </div>
-            <p class="developer-credit">Developer: Aniket Verma</p>
-        </div>
-    </div>
+        <div id="main-menu" class="screen active">
+            <div class="menu-container">
+                <h1 class="title">Evolution Simulator</h1>
+                <p class="subtitle">Watch creatures evolve and adapt</p>
 
-    <!-- Settings Screen -->
-    <div id="settings-screen" class="screen">
-        <div class="settings-container">
-            <h1>Settings</h1>
-            
-            <div class="settings-group">
-                <label for="difficulty">Difficulty:</label>
-                <select id="difficulty">
-                    <option value="easy">Easy (Slower enemies)</option>
-                    <option value="normal" selected>Normal</option>
-                    <option value="hard">Hard (Aggressive enemies)</option>
-                </select>
-            </div>
-
-            <div class="settings-group">
-                <label>
-                    <input type="checkbox" id="show-grid" checked>
-                    Show Grid
-                </label>
-            </div>
-
-            <div class="settings-group">
-                <label>
-                    <input type="checkbox" id="show-debug" unchecked>
-                    Show Debug Info
-                </label>
-            </div>
-
-            <div class="settings-buttons">
-                <button id="settings-back-btn" class="btn btn-secondary">Back</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- About Screen -->
-    <div id="about-screen" class="screen">
-        <div class="about-container">
-            <h1>About</h1>
-            <p>Evolution Simulator is a 3D simulation game where creatures evolve and adapt to their environment.</p>
-            
-            <h2>Features</h2>
-            <ul>
-                <li>3D Environment</li>
-                <li>Creature Evolution</li>
-                <li>Natural Selection</li>
-                <li>Real-time Statistics</li>
-            </ul>
-
-            <p class="version">Version 1.0.0</p>
-            <p class="developer-credit">Developer: Aniket Verma</p>
-            
-            <button id="about-back-btn" class="btn btn-secondary">Back</button>
-        </div>
-    </div>
-
-    <!-- Game HUD (In-Game UI) -->
-    <div id="game-hud" class="hud">
-        <div class="hud-stats">
-            <div class="stat">
-                <span class="label">Level:</span>
-                <span id="player-level" class="value">1</span>
-            </div>
-            <div class="stat">
-                <span class="label">Health:</span>
-                <div class="health-bar">
-                    <div id="health-bar" class="bar"></div>
+                <div class="menu-buttons">
+                    <button id="start-btn" class="btn btn-primary">Start Simulation</button>
+                    <button id="settings-btn" class="btn btn-secondary">Settings</button>
+                    <button id="about-btn" class="btn btn-secondary">About</button>
                 </div>
-                <span id="player-health" class="value-small">100 / 100</span>
+                <p class="developer-credit">Developer: Aniket Verma</p>
             </div>
-            <div class="stat">
-                <span class="label">Experience:</span>
-                <div class="exp-bar">
-                    <div id="exp-bar" class="bar"></div>
+        </div>
+
+        <div id="settings-screen" class="screen">
+            <div class="settings-container">
+                <h1>Settings</h1>
+
+                <div class="settings-group">
+                    <label for="difficulty">Difficulty:</label>
+                    <select id="difficulty">
+                        <option value="easy">Easy (Slower enemies)</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="hard">Hard (Aggressive enemies)</option>
+                    </select>
                 </div>
-                <span id="player-exp" class="value-small">0 / 100</span>
-            </div>
-            <div class="stat">
-                <span class="label">Map:</span>
-                <span id="current-map" class="value">Starter Map</span>
-            </div>
-            <div class="stat">
-                <span class="label">Enemies:</span>
-                <span id="enemy-count" class="value">0</span>
-            </div>
-            <div class="stat">
-                <span class="label">Time:</span>
-                <span id="time-elapsed" class="value">0:00</span>
+
+                <div class="settings-group">
+                    <label>
+                        <input type="checkbox" id="show-grid" checked>
+                        Show Grid
+                    </label>
+                </div>
+
+                <div class="settings-group">
+                    <label>
+                        <input type="checkbox" id="show-debug" unchecked>
+                        Show Debug Info
+                    </label>
+                </div>
+
+                <div class="settings-buttons">
+                    <button id="settings-back-btn" class="btn btn-secondary">Back</button>
+                </div>
             </div>
         </div>
 
-        <div class="hud-controls">
-            <button id="pause-btn" class="btn-small">Pause</button>
-            <button id="menu-btn" class="btn-small">Menu</button>
+        <div id="about-screen" class="screen">
+            <div class="about-container">
+                <h1>About</h1>
+                <p>Evolution Simulator is a 3D simulation game where creatures evolve and adapt to their environment.</p>
+
+                <h2>Features</h2>
+                <ul>
+                    <li>3D Environment</li>
+                    <li>Creature Evolution</li>
+                    <li>Natural Selection</li>
+                    <li>Real-time Statistics</li>
+                </ul>
+
+                <p class="version">Version 1.0.0</p>
+                <p class="developer-credit">Developer: Aniket Verma</p>
+
+                <button id="about-back-btn" class="btn btn-secondary">Back</button>
+            </div>
         </div>
-    </div>
 
-    <!-- Mobile Touch Controls -->
-    <div id="joystick-container" class="joystick-container">
-        <div class="joystick-base">
-            <div class="joystick"></div>
+        <div id="game-hud" class="hud">
+            <div class="hud-stats">
+                <div class="stat stat-level">
+                    <span class="label">Level:</span>
+                    <span id="player-level" class="value">1</span>
+                </div>
+                <div class="stat stat-health">
+                    <span class="label">Health:</span>
+                    <div class="health-bar">
+                        <div id="health-bar" class="bar"></div>
+                    </div>
+                    <span id="player-health" class="value-small">100 / 100</span>
+                </div>
+            </div>
+
+            <div class="hud-controls">
+                <button id="pause-btn" class="btn-small">Pause</button>
+                <button id="menu-btn" class="btn-small">Menu</button>
+            </div>
         </div>
-    </div>
 
-    <!-- Map View -->
-    <div id="map-view-container" class="map-view-container">
-        <div class="map-header">
-            <span class="map-title">Map</span>
-            <button id="close-map-btn" class="close-btn">✕</button>
+        <div id="joystick-container" class="joystick-container">
+            <div class="joystick-base">
+                <div class="joystick"></div>
+            </div>
         </div>
-        <canvas id="map-view" class="map-canvas"></canvas>
-    </div>
 
-    <!-- Mobile Menu Button for Map -->
-    <button id="map-btn" class="mobile-btn map-btn">📍 Map</button>
+        <div id="map-view-container" class="map-view-container">
+            <div class="map-header">
+                <span class="map-title">Map</span>
+                <button id="close-map-btn" class="close-btn">✕</button>
+            </div>
+            <canvas id="map-view" class="map-canvas"></canvas>
+        </div>
 
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="screen">
-        <div class="loading-container">
-            <h1>Loading...</h1>
-            <div class="spinner"></div>
+        <button id="map-btn" class="mobile-btn map-btn">📍 Map</button>
+
+        <div id="loading-screen" class="screen">
+            <div class="loading-container">
+                <h1>Loading...</h1>
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <div class="mobile-action-panel" id="mobile-action-panel">
+            <button id="sprint-button" class="action-button sprint-button" aria-label="Sprint">
+                <span class="action-icon">🏃</span>
+                <span class="action-label">Sprint</span>
+            </button>
+            <button id="dash-button" class="action-button dash-button" aria-label="Dash">
+                <span class="action-icon">↗</span>
+                <span class="action-label">Jump</span>
+            </button>
+            <button id="action-button" class="action-button action-button-main" aria-label="Action">
+                <span class="action-icon">👊</span>
+                <span class="action-label">Punch</span>
+            </button>
         </div>
     </div>
 
