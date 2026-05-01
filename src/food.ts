@@ -1,46 +1,40 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 
 export class Food {
-    public position: THREE.Vector3;
+    public position: BABYLON.Vector3;
     public radius: number = 0.2;
     public nutrition: number = 10;
     
-    private mesh: THREE.Mesh;
-    private scene: THREE.Scene;
+    private mesh: BABYLON.Mesh;
+    private scene: BABYLON.Scene;
 
-    constructor(scene: THREE.Scene, position: THREE.Vector3) {
+    constructor(scene: BABYLON.Scene, position: BABYLON.Vector3) {
         this.scene = scene;
         this.position = position.clone();
 
-        const geometry = new THREE.SphereGeometry(this.radius, 8, 8);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0xffaa00,
-            roughness: 0.4,
-            metalness: 0.5,
-            emissive: 0xff8800,
-        });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.copy(this.position);
-        this.mesh.castShadow = true;
-        this.mesh.receiveShadow = true;
-        this.scene.add(this.mesh);
+        this.mesh = BABYLON.MeshBuilder.CreateSphere('food', { diameter: this.radius * 2, segments: 10 }, this.scene);
+        const material = new BABYLON.StandardMaterial('food-material', this.scene);
+        material.diffuseColor = BABYLON.Color3.FromHexString('#ffaa00');
+        material.emissiveColor = BABYLON.Color3.FromHexString('#ff8800');
+        material.specularColor = BABYLON.Color3.FromHexString('#553300');
+        this.mesh.material = material;
+        this.mesh.position.copyFrom(this.position);
+        this.mesh.receiveShadows = true;
     }
 
     public dispose(): void {
-        this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        (this.mesh.material as THREE.Material).dispose();
+        this.mesh.dispose();
     }
 }
 
 export class FoodManager {
     private foods: Food[] = [];
-    private scene: THREE.Scene;
+    private scene: BABYLON.Scene;
     private spawnRate: number = 0.1; // Foods per second
     private spawnTimer: number = 0;
     private maxFoods: number = 100;
 
-    constructor(scene: THREE.Scene) {
+    constructor(scene: BABYLON.Scene) {
         this.scene = scene;
         this.initializeFoods(50);
     }
@@ -49,7 +43,7 @@ export class FoodManager {
         for (let i = 0; i < count; i++) {
             const x = (Math.random() - 0.5) * 150;
             const z = (Math.random() - 0.5) * 150;
-            const food = new Food(this.scene, new THREE.Vector3(x, 0.5, z));
+            const food = new Food(this.scene, new BABYLON.Vector3(x, 0.5, z));
             this.foods.push(food);
         }
     }
@@ -60,7 +54,7 @@ export class FoodManager {
         if (this.spawnTimer > 1 / this.spawnRate && this.foods.length < this.maxFoods) {
             const x = (Math.random() - 0.5) * 150;
             const z = (Math.random() - 0.5) * 150;
-            const food = new Food(this.scene, new THREE.Vector3(x, 0.5, z));
+            const food = new Food(this.scene, new BABYLON.Vector3(x, 0.5, z));
             this.foods.push(food);
             this.spawnTimer = 0;
         }

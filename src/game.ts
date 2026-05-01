@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 import { Scene3D } from './scene';
 import { UIManager } from './ui';
 import { Player } from './player';
@@ -8,6 +8,7 @@ import { CombatSystem } from './combat';
 import { LevelProgressionSystem } from './levelSystem';
 import { MapManager } from './mapManager';
 import { MobileControls, MapView } from './mobile';
+import { PlayerControlInput } from './controls';
 
 export class Game {
     private scene3D: Scene3D | null = null;
@@ -21,6 +22,12 @@ export class Game {
     private mobileControls: MobileControls | null = null;
     private mapView: MapView | null = null;
     private animationFrameId: number | null = null;
+    private keyboardState: Set<string> = new Set();
+    private queuedActions = {
+        dash: false,
+        interact: false,
+    };
+    private mapButtonListenerAttached: boolean = false;
     
     private isRunning: boolean = false;
     private isPaused: boolean = false;
@@ -67,45 +74,64 @@ export class Game {
 
     private setupInputListeners(): void {
         window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            const handled = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', ' ', 'spacebar', 'e', 'enter'].includes(key);
+            if (handled) {
+                e.preventDefault();
+            }
+
+            this.keyboardState.add(key);
+
             switch (e.key.toUpperCase()) {
                 case 'W':
                 case 'ARROWUP':
-                    this.input.up = true;
                     break;
                 case 'S':
                 case 'ARROWDOWN':
-                    this.input.down = true;
                     break;
                 case 'A':
                 case 'ARROWLEFT':
-                    this.input.left = true;
                     break;
                 case 'D':
                 case 'ARROWRIGHT':
-                    this.input.right = true;
+                    break;
+                case ' ':
+                case 'SPACEBAR':
+                    if (!e.repeat) {
+                        this.queuedActions.dash = true;
+                    }
+                    break;
+                case 'E':
+                case 'ENTER':
+                    if (!e.repeat) {
+                        this.queuedActions.interact = true;
+                    }
                     break;
             }
         });
 
         window.addEventListener('keyup', (e) => {
+            this.keyboardState.delete(e.key.toLowerCase());
             switch (e.key.toUpperCase()) {
                 case 'W':
                 case 'ARROWUP':
-                    this.input.up = false;
                     break;
                 case 'S':
                 case 'ARROWDOWN':
-                    this.input.down = false;
                     break;
                 case 'A':
                 case 'ARROWLEFT':
-                    this.input.left = false;
                     break;
                 case 'D':
                 case 'ARROWRIGHT':
-                    this.input.right = false;
                     break;
             }
+        });
+
+        window.addEventListener('blur', () => {
+            this.keyboardState.clear();
+            this.queuedActions.dash = false;
+            this.queuedActions.interact = false;
         });
     }
 
@@ -159,16 +185,16 @@ export class Game {
         this.isPaused = false;
         this.gameTime = 0;
 
-        // Initialize map manager
-        this.mapManager = new MapManager(this.scene3D!.getScene());
-        this.mapManager.loadMap(0, this.foodManager!);
+        const scene = this.scene3D!.getScene();
+        const camera = this.scene3D!.getCamera();
+
+        // Initialize food + map before creatures so the world exists first
+        this.foodManager = new FoodManager(scene);
+        this.mapManager = new MapManager(scene);
+        this.mapManager.loadMap(0, this.foodManager);
 
         // Initialize player
-        const camera = this.scene3D!.getCamera();
-        this.player = new Player(this.scene3D!.getScene(), camera, new THREE.Vector3(0, 1, 0));
-
-        // Initialize food manager
-        this.foodManager = new FoodManager(this.scene3D!.getScene());
+        this.player = new Player(scene, camera, new BABYLON.Vector3(0, 1, 0));
 
         // Generate initial enemies
         this.enemies = this.mapManager.generateEnemies(15, this.player.stats.level);
@@ -178,7 +204,7 @@ export class Game {
             this.player,
             this.enemies,
             this.foodManager,
-            this.scene3D!.getScene()
+            scene
         );
 
         // Initialize mobile controls
@@ -193,7 +219,15 @@ export class Game {
             console.warn('Map view not available:', e);
         }
 
-        // Setup mobile map button
+        this.setupMapControls();
+    }
+
+    private setupMapControls(): void {
+        if (this.mapButtonListenerAttached) {
+            document.getElementById('map-btn')?.classList.add('active');
+            return;
+        }
+
         document.getElementById('map-btn')?.classList.add('active');
         document.getElementById('map-btn')?.addEventListener('click', () => {
             const container = document.getElementById('map-view-container');
@@ -204,10 +238,11 @@ export class Game {
             }
         });
 
-        // Setup close map button
         document.getElementById('close-map-btn')?.addEventListener('click', () => {
             document.getElementById('map-view-container')?.classList.remove('active');
         });
+
+        this.mapButtonListenerAttached = true;
     }
 
     private togglePause(): void {
@@ -243,6 +278,9 @@ export class Game {
         this.mapManager = null;
         this.mobileControls = null;
         this.mapView = null;
+        this.keyboardState.clear();
+        this.queuedActions.dash = false;
+        this.queuedActions.interact = false;
     }
 
     private showScreen(screenId: string): void {
@@ -338,27 +376,15 @@ export class Game {
 
         if (this.isRunning && !this.isPaused) {
             const deltaTime = (1 / 60) * this.simulationSpeed;
-            
-            // Merge keyboard and touch input
-            if (this.mobileControls) {
-                const touchInput = this.mobileControls.touchInput;
-                this.input = {
-                    up: this.input.up || touchInput.up,
-                    down: this.input.down || touchInput.down,
-                    left: this.input.left || touchInput.left,
-                    right: this.input.right || touchInput.right,
-                };
 
-                // Update camera rotation from touch
-                const cameraRot = this.mobileControls.getCameraRotation();
-                this.scene3D?.updateCameraRotation(cameraRot.x, cameraRot.y);
-            }
+            const controlState = this.buildControlState();
 
             // Update player
-            this.player?.update(deltaTime, this.input);
+            this.player?.update(deltaTime, controlState);
 
-            // Reset input for next frame (keyboard is updated by events)
-            // Touch input is handled by MobileControls
+            if (controlState.interact) {
+                this.combatSystem?.triggerInteraction();
+            }
 
             // Update enemies
             for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -415,13 +441,59 @@ export class Game {
         this.scene3D?.render();
     };
 
+    private buildControlState(): PlayerControlInput {
+        let forward = 0;
+        let strafe = 0;
+
+        if (this.keyboardState.has('w') || this.keyboardState.has('arrowup')) forward += 1;
+        if (this.keyboardState.has('s') || this.keyboardState.has('arrowdown')) forward -= 1;
+        if (this.keyboardState.has('d') || this.keyboardState.has('arrowright')) strafe += 1;
+        if (this.keyboardState.has('a') || this.keyboardState.has('arrowleft')) strafe -= 1;
+
+        let sprint = this.keyboardState.has('shift');
+        let dash = this.queuedActions.dash;
+        let interact = this.queuedActions.interact;
+
+        this.queuedActions.dash = false;
+        this.queuedActions.interact = false;
+
+        if (this.mobileControls) {
+            const touchMovement = this.mobileControls.getMovementInput();
+            forward += touchMovement.moveY;
+            strafe += touchMovement.moveX;
+            sprint = sprint || touchMovement.sprint;
+
+            const touchActions = this.mobileControls.consumeActions();
+            dash = dash || touchActions.dash;
+            interact = interact || touchActions.interact;
+        }
+
+        const camera = this.scene3D?.getCamera();
+        const alpha = camera?.alpha ?? 0;
+        const forwardVector = new BABYLON.Vector3(-Math.sin(alpha), 0, -Math.cos(alpha));
+        const rightVector = new BABYLON.Vector3(-forwardVector.z, 0, forwardVector.x);
+        const worldMove = rightVector.scale(strafe).add(forwardVector.scale(forward));
+
+        if (worldMove.lengthSquared() > 1) {
+            worldMove.normalize();
+        }
+
+        return {
+            moveX: worldMove.x,
+            moveY: worldMove.z,
+            sprint,
+            dash,
+            interact,
+        };
+    }
+
     private gameOverEvent(): void {
         this.isRunning = false;
         alert(`Game Over! You reached level ${this.player?.stats.level}`);
         this.returnToMenu();
     }
 
-    public getScene(): THREE.Scene | null {
+    public getScene(): BABYLON.Scene | null {
         return this.scene3D?.getScene() || null;
     }
 

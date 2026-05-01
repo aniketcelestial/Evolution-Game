@@ -11,6 +11,8 @@ body {
     overflow: hidden;
     height: 100vh;
     width: 100vw;
+    touch-action: none;
+    overscroll-behavior: none;
 }
 
 html, body, #canvas-container {
@@ -23,6 +25,12 @@ html, body, #canvas-container {
     top: 0;
     left: 0;
     z-index: 1;
+}
+
+#canvas-container canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 /* Screen Management */
@@ -422,6 +430,58 @@ html, body, #canvas-container {
     transition: opacity 0.3s ease;
 }
 
+.mobile-action-panel {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 41;
+    display: flex;
+    gap: 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.mobile-action-panel.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.action-button {
+    min-width: 84px;
+    padding: 0.85rem 1rem;
+    border: 2px solid rgba(0, 212, 255, 0.55);
+    border-radius: 10px;
+    color: #e8fbff;
+    background: rgba(10, 18, 38, 0.8);
+    box-shadow: 0 0 18px rgba(0, 212, 255, 0.18);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.action-button.active,
+.action-button:active {
+    transform: translateY(1px) scale(0.97);
+}
+
+.sprint-button {
+    border-color: rgba(91, 211, 127, 0.7);
+    box-shadow: 0 0 18px rgba(91, 211, 127, 0.18);
+}
+
+.dash-button {
+    border-color: rgba(255, 173, 73, 0.75);
+    box-shadow: 0 0 18px rgba(255, 173, 73, 0.18);
+}
+
+.action-button-main {
+    border-color: rgba(0, 212, 255, 0.85);
+    box-shadow: 0 0 22px rgba(0, 212, 255, 0.24);
+}
+
 .joystick-container.active {
     opacity: 1;
     pointer-events: all;
@@ -597,6 +657,19 @@ html, body, #canvas-container {
     .map-canvas {
         width: 150px;
         height: 150px;
+    }
+
+    .mobile-action-panel {
+        bottom: 12px;
+        right: 12px;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .action-button {
+        min-width: 72px;
+        padding: 0.7rem 0.85rem;
+        font-size: 0.75rem;
     }
 }
 

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 import { Player } from './player';
 import { Enemy } from './enemy';
 import { Food, FoodManager } from './food';
@@ -8,14 +8,12 @@ export class CombatSystem {
     private enemies: Enemy[];
     private foods: Food[];
     private foodManager: FoodManager;
-    private scene: THREE.Scene;
 
-    constructor(player: Player, enemies: Enemy[], foodManager: FoodManager, scene: THREE.Scene) {
+    constructor(player: Player, enemies: Enemy[], foodManager: FoodManager, scene: unknown) {
         this.player = player;
         this.enemies = enemies;
         this.foodManager = foodManager;
         this.foods = foodManager.getFoods();
-        this.scene = scene;
     }
 
     public update(): void {
@@ -29,7 +27,7 @@ export class CombatSystem {
         // Check food collisions
         for (let i = this.foods.length - 1; i >= 0; i--) {
             const food = this.foods[i];
-            const distance = playerPos.distanceTo(food.position);
+            const distance = BABYLON.Vector3.Distance(playerPos, food.position);
 
             if (distance < playerRadius + food.radius) {
                 this.player.eat(food.nutrition);
@@ -41,7 +39,7 @@ export class CombatSystem {
         // Check enemy collisions
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const enemy = this.enemies[i];
-            const distance = playerPos.distanceTo(enemy.position);
+            const distance = BABYLON.Vector3.Distance(playerPos, enemy.position);
             const enemyRadius = enemy.getRadius();
 
             if (distance < playerRadius + enemyRadius) {
@@ -54,16 +52,65 @@ export class CombatSystem {
             for (let j = i + 1; j < this.enemies.length; j++) {
                 const enemy1 = this.enemies[i];
                 const enemy2 = this.enemies[j];
-                const distance = enemy1.position.distanceTo(enemy2.position);
+                const distance = BABYLON.Vector3.Distance(enemy1.position, enemy2.position);
                 const minDistance = enemy1.getRadius() + enemy2.getRadius();
 
                 if (distance < minDistance && distance > 0) {
                     // Push apart
-                    const direction = enemy2.position.clone().sub(enemy1.position).normalize();
+                    const direction = enemy2.position.subtract(enemy1.position).normalize();
                     const overlap = minDistance - distance;
-                    enemy1.position.sub(direction.multiplyScalar(overlap * 0.5));
-                    enemy2.position.add(direction.multiplyScalar(overlap * 0.5));
+                    enemy1.position.subtractInPlace(direction.scale(overlap * 0.5));
+                    enemy2.position.addInPlace(direction.scale(overlap * 0.5));
                 }
+            }
+        }
+    }
+
+    public triggerInteraction(): void {
+        const playerPos = this.player.getPosition();
+        const interactionRange = this.player.getRadius() * 5 + 3;
+
+        let nearestFood: Food | null = null;
+        let nearestFoodDistance = Infinity;
+        for (const food of this.foods) {
+            const distance = BABYLON.Vector3.Distance(playerPos, food.position);
+            if (distance < interactionRange && distance < nearestFoodDistance) {
+                nearestFood = food;
+                nearestFoodDistance = distance;
+            }
+        }
+
+        if (nearestFood) {
+            this.player.eat(nearestFood.nutrition * 1.5);
+            this.foodManager.removeFood(nearestFood);
+            this.foods = this.foodManager.getFoods();
+            return;
+        }
+
+        let nearestEnemy: Enemy | null = null;
+        let nearestEnemyDistance = Infinity;
+        let nearestEnemyIndex = -1;
+
+        for (let i = 0; i < this.enemies.length; i++) {
+            const enemy = this.enemies[i];
+            const distance = BABYLON.Vector3.Distance(playerPos, enemy.position);
+            if (distance < interactionRange && distance < nearestEnemyDistance) {
+                nearestEnemy = enemy;
+                nearestEnemyDistance = distance;
+                nearestEnemyIndex = i;
+            }
+        }
+
+        if (nearestEnemy && nearestEnemyIndex >= 0) {
+            if (this.player.stats.size >= nearestEnemy.stats.size) {
+                nearestEnemy.takeDamage(this.player.stats.attack * 1.5);
+                if (!nearestEnemy.isAlive()) {
+                    this.player.eat(nearestEnemy.stats.experienceReward * 0.75);
+                    nearestEnemy.dispose();
+                    this.enemies.splice(nearestEnemyIndex, 1);
+                }
+            } else {
+                this.player.takeDamage(nearestEnemy.stats.attack * 0.3);
             }
         }
     }

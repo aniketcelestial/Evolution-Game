@@ -1,16 +1,17 @@
-import * as THREE from 'three';
-
 export interface TouchInput {
-    up: boolean;
-    down: boolean;
-    left: boolean;
-    right: boolean;
+    moveX: number;
+    moveY: number;
+    sprint: boolean;
 }
 
 export class MobileControls {
     private joystickContainer: HTMLElement;
     private joystick: HTMLElement;
     private joystickBase: HTMLElement;
+    private actionPanel: HTMLElement;
+    private sprintButton: HTMLButtonElement;
+    private dashButton: HTMLButtonElement;
+    private actionButton: HTMLButtonElement;
     private isDragging: boolean = false;
     private touchStartX: number = 0;
     private touchStartY: number = 0;
@@ -20,23 +21,22 @@ export class MobileControls {
     private maxDistance: number = 50;
 
     public touchInput: TouchInput = {
-        up: false,
-        down: false,
-        left: false,
-        right: false,
+        moveX: 0,
+        moveY: 0,
+        sprint: false,
     };
 
-    private cameraRotationX: number = 0;
-    private cameraRotationY: number = 0;
-    private touchCameraStartX: number = 0;
-    private touchCameraStartY: number = 0;
-    private isCameraRotating: boolean = false;
-    private cameraRotationSensitivity: number = 0.005;
+    private dashQueued: boolean = false;
+    private interactQueued: boolean = false;
 
     constructor() {
         this.joystickContainer = document.getElementById('joystick-container') || this.createJoystick();
         this.joystickBase = this.joystickContainer.querySelector('.joystick-base') as HTMLElement;
         this.joystick = this.joystickContainer.querySelector('.joystick') as HTMLElement;
+        this.actionPanel = document.getElementById('mobile-action-panel') || this.createActionPanel();
+        this.sprintButton = this.actionPanel.querySelector('#sprint-button') as HTMLButtonElement;
+        this.dashButton = this.actionPanel.querySelector('#dash-button') as HTMLButtonElement;
+        this.actionButton = this.actionPanel.querySelector('#action-button') as HTMLButtonElement;
         
         this.setupTouchListeners();
         this.initializeJoystickPosition();
@@ -55,6 +55,19 @@ export class MobileControls {
         return container;
     }
 
+    private createActionPanel(): HTMLElement {
+        const panel = document.createElement('div');
+        panel.id = 'mobile-action-panel';
+        panel.className = 'mobile-action-panel';
+        panel.innerHTML = `
+            <button id="sprint-button" class="action-button sprint-button">Sprint</button>
+            <button id="dash-button" class="action-button dash-button">Dash</button>
+            <button id="action-button" class="action-button action-button-main">Action</button>
+        `;
+        document.body.appendChild(panel);
+        return panel;
+    }
+
     private initializeJoystickPosition(): void {
         const rect = this.joystickBase.getBoundingClientRect();
         this.joystickCenterX = rect.left + rect.width / 2;
@@ -69,12 +82,17 @@ export class MobileControls {
         this.joystickBase.addEventListener('touchmove', (e) => this.handleJoystickTouchMove(e));
         this.joystickBase.addEventListener('touchend', (e) => this.handleJoystickTouchEnd(e));
 
-        // Camera control - slide anywhere on screen
-        if (gameHud) {
-            gameHud.addEventListener('touchstart', (e) => this.handleCameraRotationStart(e));
-            document.addEventListener('touchmove', (e) => this.handleCameraRotationMove(e));
-            document.addEventListener('touchend', (e) => this.handleCameraRotationEnd(e));
-        }
+        this.bindHoldButton(this.sprintButton, (held) => {
+            this.touchInput.sprint = held;
+        });
+
+        this.bindTapButton(this.dashButton, () => {
+            this.dashQueued = true;
+        });
+
+        this.bindTapButton(this.actionButton, () => {
+            this.interactQueued = true;
+        });
 
         // Prevent default touch behaviors
         document.addEventListener('touchmove', (e) => {
@@ -82,6 +100,38 @@ export class MobileControls {
                 e.preventDefault();
             }
         }, { passive: false });
+    }
+
+    private bindHoldButton(button: HTMLButtonElement, onChange: (held: boolean) => void): void {
+        const begin = (event: PointerEvent | TouchEvent | MouseEvent) => {
+            event.preventDefault();
+            onChange(true);
+            button.classList.add('active');
+        };
+
+        const end = (event: PointerEvent | TouchEvent | MouseEvent) => {
+            event.preventDefault();
+            onChange(false);
+            button.classList.remove('active');
+        };
+
+        button.addEventListener('pointerdown', begin);
+        button.addEventListener('pointerup', end);
+        button.addEventListener('pointercancel', end);
+        button.addEventListener('pointerleave', end);
+    }
+
+    private bindTapButton(button: HTMLButtonElement, onTap: () => void): void {
+        button.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            onTap();
+            button.classList.add('active');
+        });
+
+        const release = () => button.classList.remove('active');
+        button.addEventListener('pointerup', release);
+        button.addEventListener('pointercancel', release);
+        button.addEventListener('pointerleave', release);
     }
 
     private handleJoystickTouchStart(event: TouchEvent): void {
@@ -115,70 +165,43 @@ export class MobileControls {
         this.joystick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
 
         // Update input based on position
-        this.touchInput.up = moveY < -20;
-        this.touchInput.down = moveY > 20;
-        this.touchInput.left = moveX < -20;
-        this.touchInput.right = moveX > 20;
+        this.touchInput.moveX = moveX / this.maxDistance;
+        this.touchInput.moveY = -moveY / this.maxDistance;
     }
 
     private handleJoystickTouchEnd(event: TouchEvent): void {
         this.isDragging = false;
         this.joystick.style.transform = 'translate(-50%, -50%)';
-        this.touchInput = { up: false, down: false, left: false, right: false };
+        this.touchInput.moveX = 0;
+        this.touchInput.moveY = 0;
     }
 
-    private handleCameraRotationStart(event: TouchEvent): void {
-        // Don't start camera rotation if touching joystick
-        if (event.target === this.joystickBase || this.joystickBase.contains(event.target as Node)) {
-            return;
-        }
-
-        // Check if there's a second touch (two-finger camera control)
-        if (event.touches.length === 2) {
-            this.isCameraRotating = true;
-            this.touchCameraStartX = event.touches[0].clientX;
-            this.touchCameraStartY = event.touches[0].clientY;
-        }
-    }
-
-    private handleCameraRotationMove(event: TouchEvent): void {
-        if (!this.isCameraRotating || event.touches.length < 2) return;
-
-        const deltaX = event.touches[0].clientX - this.touchCameraStartX;
-        const deltaY = event.touches[0].clientY - this.touchCameraStartY;
-
-        this.cameraRotationY += deltaX * this.cameraRotationSensitivity;
-        this.cameraRotationX += deltaY * this.cameraRotationSensitivity;
-
-        // Clamp X rotation
-        this.cameraRotationX = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.cameraRotationX));
-
-        this.touchCameraStartX = event.touches[0].clientX;
-        this.touchCameraStartY = event.touches[0].clientY;
-    }
-
-    private handleCameraRotationEnd(event: TouchEvent): void {
-        this.isCameraRotating = false;
-    }
-
-    public getCameraRotation(): { x: number; y: number } {
+    public getMovementInput(): { moveX: number; moveY: number; sprint: boolean } {
         return {
-            x: this.cameraRotationX,
-            y: this.cameraRotationY,
+            moveX: this.touchInput.moveX,
+            moveY: this.touchInput.moveY,
+            sprint: this.touchInput.sprint,
         };
     }
 
-    public resetCameraRotation(): void {
-        this.cameraRotationX = 0;
-        this.cameraRotationY = 0;
+    public consumeActions(): { dash: boolean; interact: boolean } {
+        const actions = {
+            dash: this.dashQueued,
+            interact: this.interactQueued,
+        };
+        this.dashQueued = false;
+        this.interactQueued = false;
+        return actions;
     }
 
     public show(): void {
         this.joystickContainer.classList.add('active');
+        this.actionPanel.classList.add('active');
     }
 
     public hide(): void {
         this.joystickContainer.classList.remove('active');
+        this.actionPanel.classList.remove('active');
     }
 }
 
@@ -233,9 +256,9 @@ export class MapView {
     }
 
     public updateMap(
-        playerPos: THREE.Vector3,
-        enemies: Array<{ position: THREE.Vector3; alive: boolean }>,
-        foods: Array<{ position: THREE.Vector3 }>,
+        playerPos: { x: number; z: number },
+        enemies: Array<{ position: { x: number; z: number }; alive: boolean }>,
+        foods: Array<{ position: { x: number; z: number } }>,
         mapSize: number = 200
     ): void {
         this.drawMap();

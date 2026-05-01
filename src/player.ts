@@ -1,4 +1,5 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
+import { PlayerControlInput } from './controls';
 
 export interface PlayerStats {
     level: number;
@@ -12,22 +13,25 @@ export interface PlayerStats {
 }
 
 export class Player {
-    public position: THREE.Vector3;
-    public velocity: THREE.Vector3;
+    public position: BABYLON.Vector3;
+    public velocity: BABYLON.Vector3;
     public radius: number = 0.5; // Starts tiny
     public stats: PlayerStats;
     
-    private mesh: THREE.Mesh;
-    private bodySegments: THREE.Mesh[] = [];
-    private trailPoints: THREE.Vector3[] = [];
-    private scene: THREE.Scene;
-    private camera: THREE.PerspectiveCamera;
+    private mesh: BABYLON.Mesh;
+    private bodySegments: BABYLON.Mesh[] = [];
+    private trailPoints: BABYLON.Vector3[] = [];
+    private scene: BABYLON.Scene;
+    private camera: BABYLON.ArcRotateCamera;
+    private dashCooldown: number = 0;
+    private dashTimer: number = 0;
+    private dashDirection: BABYLON.Vector3 = BABYLON.Vector3.Zero();
 
-    constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, position: THREE.Vector3) {
+    constructor(scene: BABYLON.Scene, camera: BABYLON.ArcRotateCamera, position: BABYLON.Vector3) {
         this.scene = scene;
         this.camera = camera;
         this.position = position.clone();
-        this.velocity = new THREE.Vector3();
+        this.velocity = BABYLON.Vector3.Zero();
 
         this.stats = {
             level: 1,
@@ -41,40 +45,32 @@ export class Player {
         };
 
         this.mesh = this.createMesh();
-        this.scene.add(this.mesh);
         this.buildBodySegments();
         this.updateMesh();
     }
 
-    private createMesh(): THREE.Mesh {
-        const geometry = new THREE.SphereGeometry(this.radius, 24, 18);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0x00ff00,
-            roughness: 0.5,
-            metalness: 0.3,
-            emissive: 0x00aa00,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+    private createMesh(): BABYLON.Mesh {
+        const mesh = BABYLON.MeshBuilder.CreateSphere('player-head', { diameter: this.radius * 2, segments: 24 }, this.scene);
+        const material = new BABYLON.StandardMaterial('player-head-material', this.scene);
+        material.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
+        material.emissiveColor = BABYLON.Color3.FromHexString('#00aa00');
+        material.specularColor = BABYLON.Color3.FromHexString('#223322');
+        mesh.material = material;
+        mesh.receiveShadows = true;
         return mesh;
     }
 
     private buildBodySegments(): void {
         const segmentCount = 14;
         for (let i = 0; i < segmentCount; i++) {
-            const segmentGeometry = new THREE.SphereGeometry(this.radius * 0.9, 18, 14);
-            const segmentMaterial = new THREE.MeshStandardMaterial({
-                color: 0x00ff00,
-                roughness: 0.65,
-                metalness: 0.15,
-                emissive: 0x004400,
-            });
-            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
-            segment.castShadow = true;
-            segment.receiveShadow = true;
+            const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-${i}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
+            const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-${i}`, this.scene);
+            segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
+            segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
+            segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
+            segment.material = segmentMaterial;
+            segment.receiveShadows = true;
             this.bodySegments.push(segment);
-            this.scene.add(segment);
         }
 
         const initialPoint = this.position.clone();
@@ -83,22 +79,29 @@ export class Player {
         }
     }
 
-    public update(deltaTime: number, input: { up: boolean; down: boolean; left: boolean; right: boolean }): void {
-        // Movement
-        const moveVector = new THREE.Vector3();
-        if (input.up) moveVector.z -= 1;
-        if (input.down) moveVector.z += 1;
-        if (input.left) moveVector.x -= 1;
-        if (input.right) moveVector.x += 1;
+    public update(deltaTime: number, input: PlayerControlInput): void {
+        this.dashCooldown = Math.max(0, this.dashCooldown - deltaTime);
 
-        if (moveVector.length() > 0) {
+        const moveVector = new BABYLON.Vector3(input.moveX, 0, input.moveY);
+        if (moveVector.lengthSquared() > 1) {
             moveVector.normalize();
-            this.velocity.copy(moveVector.multiplyScalar(this.stats.speed));
-        } else {
-            this.velocity.multiplyScalar(0.8);
         }
 
-        this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        const targetVelocity = moveVector.scale(this.stats.speed * (input.sprint ? 1.45 : 1));
+
+        if (input.dash && this.dashCooldown <= 0 && moveVector.lengthSquared() > 0.0001) {
+            this.dashDirection = moveVector.clone().normalize();
+            this.dashTimer = 0.18;
+            this.dashCooldown = 0.95;
+        }
+
+        if (this.dashTimer > 0) {
+            this.dashTimer -= deltaTime;
+            targetVelocity.addInPlace(this.dashDirection.scale(this.stats.speed * 4.5));
+        }
+
+        this.velocity = BABYLON.Vector3.Lerp(this.velocity, targetVelocity, Math.min(1, deltaTime * 8));
+        this.position.addInPlace(this.velocity.scale(deltaTime));
         this.pushTrailPoint();
 
         // Boundary constraints
@@ -110,9 +113,9 @@ export class Player {
     }
 
     private updateMesh(): void {
-        this.mesh.position.copy(this.position);
+        this.mesh.position.copyFrom(this.position);
         const headScale = this.stats.size * 1.15;
-        this.mesh.scale.setScalar(headScale);
+        this.mesh.scaling.setAll(headScale);
 
         const velocityStrength = Math.min(1, this.velocity.length() / Math.max(1, this.stats.speed));
         this.mesh.rotation.y = Math.atan2(this.velocity.x, this.velocity.z || 0.0001);
@@ -120,9 +123,10 @@ export class Player {
 
         // Update color based on level
         const hue = (this.stats.level / 30) * 0.3; // Green to blue as you level
-        const color = new THREE.Color().setHSL(hue, 1, 0.5);
-        (this.mesh.material as THREE.MeshStandardMaterial).color = color;
-        (this.mesh.material as THREE.MeshStandardMaterial).emissive = color;
+        const color = BABYLON.Color3.FromHSV(hue * 360, 1, 1);
+        const headMaterial = this.mesh.material as BABYLON.StandardMaterial;
+        headMaterial.diffuseColor = color;
+        headMaterial.emissiveColor = color.scale(0.35);
 
         this.updateBodySegments(color);
     }
@@ -135,7 +139,7 @@ export class Player {
         }
     }
 
-    private updateBodySegments(color: THREE.Color): void {
+    private updateBodySegments(color: BABYLON.Color3): void {
         const spacing = 7;
         const swayPhase = performance.now() * 0.006;
 
@@ -144,36 +148,28 @@ export class Player {
             const trailIndex = Math.min(this.trailPoints.length - 1, i * spacing + 1);
             const target = this.trailPoints[trailIndex] || this.position;
             const nextTarget = this.trailPoints[Math.min(this.trailPoints.length - 1, trailIndex + 1)] || target;
-            const followDirection = target.clone().sub(nextTarget);
+            const followDirection = target.subtract(nextTarget);
             const lateralOffset = Math.sin(swayPhase + i * 0.45) * (0.12 + i * 0.01);
 
-            segment.position.copy(target);
+            segment.position.copyFrom(target);
             segment.position.x += lateralOffset;
             segment.position.y = target.y + Math.cos(swayPhase + i * 0.35) * 0.08;
-            segment.scale.setScalar(Math.max(0.35, (this.stats.size * 0.9) * (1 - i / (this.bodySegments.length * 1.15))));
+            segment.scaling.setAll(Math.max(0.35, (this.stats.size * 0.9) * (1 - i / (this.bodySegments.length * 1.15))));
 
-            if (followDirection.lengthSq() > 0.0001) {
+            if (followDirection.lengthSquared() > 0.0001) {
                 segment.rotation.y = Math.atan2(followDirection.x, followDirection.z || 0.0001);
             }
 
-            const segmentMaterial = segment.material as THREE.MeshStandardMaterial;
+            const segmentMaterial = segment.material as BABYLON.StandardMaterial;
             const fade = 1 - i / (this.bodySegments.length + 2);
-            segmentMaterial.color = color.clone().lerp(new THREE.Color(0x05250c), 1 - fade * 0.9);
-            segmentMaterial.emissive = color.clone().multiplyScalar(0.2 * fade);
-            segmentMaterial.opacity = 1;
-            segmentMaterial.transparent = false;
+            segmentMaterial.diffuseColor = BABYLON.Color3.Lerp(color, BABYLON.Color3.FromHexString('#05250c'), 1 - fade * 0.9);
+            segmentMaterial.emissiveColor = color.scale(0.2 * fade);
         }
     }
 
     private updateCamera(): void {
-        const distance = 10 + this.stats.size * 5;
-        const height = 5 + this.stats.size * 2;
-        this.camera.position.lerp(new THREE.Vector3(
-            this.position.x,
-            height,
-            this.position.z + distance
-        ), 0.1);
-        this.camera.lookAt(this.position);
+        this.camera.radius = 24 + this.stats.size * 3;
+        this.camera.setTarget(this.position);
     }
 
     public addExperience(amount: number): void {
@@ -198,18 +194,14 @@ export class Player {
         this.stats.experienceNeeded = Math.floor(this.stats.experienceNeeded * 1.1);
 
         if (this.bodySegments.length < 24) {
-            const segmentGeometry = new THREE.SphereGeometry(this.radius * 0.9, 18, 14);
-            const segmentMaterial = new THREE.MeshStandardMaterial({
-                color: 0x00ff00,
-                roughness: 0.65,
-                metalness: 0.15,
-                emissive: 0x004400,
-            });
-            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
-            segment.castShadow = true;
-            segment.receiveShadow = true;
+            const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-bonus-${this.bodySegments.length}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
+            const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-bonus-${this.bodySegments.length}`, this.scene);
+            segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
+            segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
+            segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
+            segment.material = segmentMaterial;
+            segment.receiveShadows = true;
             this.bodySegments.push(segment);
-            this.scene.add(segment);
         }
 
         this.updateMesh();
@@ -232,7 +224,7 @@ export class Player {
         return this.stats.health > 0;
     }
 
-    public getPosition(): THREE.Vector3 {
+    public getPosition(): BABYLON.Vector3 {
         return this.position;
     }
 
@@ -241,14 +233,10 @@ export class Player {
     }
 
     public dispose(): void {
-        this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        (this.mesh.material as THREE.Material).dispose();
+        this.mesh.dispose();
 
         this.bodySegments.forEach(segment => {
-            this.scene.remove(segment);
-            segment.geometry.dispose();
-            (segment.material as THREE.Material).dispose();
+            segment.dispose();
         });
         this.bodySegments = [];
         this.trailPoints = [];

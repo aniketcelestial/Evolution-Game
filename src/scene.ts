@@ -1,171 +1,143 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 
 export class Scene3D {
-    private scene: THREE.Scene;
-    private camera: THREE.PerspectiveCamera;
-    private renderer: THREE.WebGLRenderer;
+    private engine: BABYLON.Engine;
+    private scene: BABYLON.Scene;
+    private camera: BABYLON.ArcRotateCamera;
     private canvas: HTMLCanvasElement | null = null;
 
     constructor() {
-        this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0a0e27);
-        this.scene.fog = new THREE.Fog(0x0a0e27, 100, 500);
-
-        this.camera = new THREE.PerspectiveCamera(
-            75,
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        );
-        this.camera.position.set(0, 15, 20);
-        this.camera.lookAt(0, 0, 0);
-
-        this.renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            alpha: true,
-            powerPreference: 'high-performance',
+        const placeholderCanvas = document.createElement('canvas');
+        this.engine = new BABYLON.Engine(placeholderCanvas, true, {
+            preserveDrawingBuffer: true,
+            stencil: true,
         });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.scene = new BABYLON.Scene(this.engine);
+        this.camera = new BABYLON.ArcRotateCamera('game-camera', Math.PI / 2, Math.PI / 3, 28, BABYLON.Vector3.Zero(), this.scene);
     }
 
     async init(): Promise<void> {
-        // Append canvas to DOM
         const container = document.getElementById('canvas-container');
-        if (container) {
-            this.canvas = this.renderer.domElement;
-            container.appendChild(this.canvas);
+        if (!container) {
+            throw new Error('canvas-container not found');
         }
 
-        // Setup lighting
-        this.setupLights();
+        this.canvas = document.createElement('canvas');
+        this.canvas.id = 'babylon-canvas';
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
+        this.canvas.style.display = 'block';
+        container.appendChild(this.canvas);
 
-        // Setup environment
+        this.engine.dispose();
+        this.engine = new BABYLON.Engine(this.canvas, true, {
+            preserveDrawingBuffer: true,
+            stencil: true,
+        });
+        this.scene = new BABYLON.Scene(this.engine);
+
+        this.scene.clearColor = BABYLON.Color4.FromColor3(BABYLON.Color3.FromHexString('#0a0e27'));
+        this.scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+        this.scene.fogColor = BABYLON.Color3.FromHexString('#0a0e27');
+        this.scene.fogStart = 90;
+        this.scene.fogEnd = 420;
+
+        this.camera = new BABYLON.ArcRotateCamera('game-camera', Math.PI / 2, Math.PI / 3.2, 28, BABYLON.Vector3.Zero(), this.scene);
+        this.camera.lowerRadiusLimit = 18;
+        this.camera.upperRadiusLimit = 56;
+        this.camera.lowerBetaLimit = 0.3;
+        this.camera.upperBetaLimit = 1.25;
+        this.camera.wheelPrecision = 45;
+        this.camera.panningSensibility = 0;
+        this.camera.angularSensibilityX = 2200;
+        this.camera.angularSensibilityY = 2200;
+        this.camera.attachControl(this.canvas, true);
+
+        this.setupLights();
         this.setupEnvironment();
     }
 
     private setupLights(): void {
-        // Ambient light
-        const ambientLight = new THREE.AmbientLight(0x4a90e2, 0.6);
-        this.scene.add(ambientLight);
+        const ambientLight = new BABYLON.HemisphericLight('ambient', new BABYLON.Vector3(0, 1, 0), this.scene);
+        ambientLight.intensity = 0.85;
+        ambientLight.diffuse = BABYLON.Color3.FromHexString('#88bbff');
+        ambientLight.groundColor = BABYLON.Color3.FromHexString('#102035');
 
-        // Directional light (sun)
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(20, 30, 10);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.far = 100;
-        directionalLight.shadow.camera.left = -50;
-        directionalLight.shadow.camera.right = 50;
-        directionalLight.shadow.camera.top = 50;
-        directionalLight.shadow.camera.bottom = -50;
-        this.scene.add(directionalLight);
+        const directionalLight = new BABYLON.DirectionalLight('sun', new BABYLON.Vector3(-0.6, -1, -0.35), this.scene);
+        directionalLight.position = new BABYLON.Vector3(30, 50, 20);
+        directionalLight.intensity = 1.1;
 
-        // Point light for atmosphere
-        const pointLight = new THREE.PointLight(0x00d4ff, 0.4);
-        pointLight.position.set(-20, 15, -20);
-        this.scene.add(pointLight);
+        const glowLight = new BABYLON.PointLight('glow', new BABYLON.Vector3(-24, 14, -20), this.scene);
+        glowLight.intensity = 0.35;
+        glowLight.diffuse = BABYLON.Color3.FromHexString('#00d4ff');
     }
 
     private setupEnvironment(): void {
-        // Create ground plane
-        const groundGeometry = new THREE.PlaneGeometry(200, 200);
-        const groundMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a3a4a,
-            roughness: 0.8,
-            metalness: 0.2,
-        });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        this.scene.add(ground);
+        const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 220, height: 220, subdivisions: 2 }, this.scene);
+        const groundMaterial = new BABYLON.StandardMaterial('ground-material', this.scene);
+        groundMaterial.diffuseColor = BABYLON.Color3.FromHexString('#1a3a4a');
+        groundMaterial.specularColor = BABYLON.Color3.Black();
+        groundMaterial.wireframe = true;
+        groundMaterial.alpha = 0.45;
+        ground.material = groundMaterial;
 
-        // Add grid helper
-        const gridHelper = new THREE.GridHelper(200, 20, 0x00d4ff, 0x444444);
-        (gridHelper as any).position.y = 0.01;
-        this.scene.add(gridHelper);
+        const grid = BABYLON.MeshBuilder.CreateGround('grid-overlay', { width: 220, height: 220, subdivisions: 20 }, this.scene);
+        grid.position.y = 0.02;
+        const gridMaterial = new BABYLON.StandardMaterial('grid-material', this.scene);
+        gridMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00d4ff');
+        gridMaterial.emissiveColor = BABYLON.Color3.FromHexString('#00aacc');
+        gridMaterial.wireframe = true;
+        gridMaterial.alpha = 0.15;
+        grid.material = gridMaterial;
 
-        // Add axes helper for debugging
-        const axesHelper = new THREE.AxesHelper(20);
-        this.scene.add(axesHelper);
-
-        // Add some environmental objects
-        this.addEnvironmentObjects();
+        this.addAtmosphereParticles();
     }
 
-    private addEnvironmentObjects(): void {
-        // Add some floating particles/stars for atmosphere
-        const particleGeometry = new THREE.BufferGeometry();
-        const particleCount = 200;
-        const positions = new Float32Array(particleCount * 3);
+    private addAtmosphereParticles(): void {
+        const starSystem = BABYLON.MeshBuilder.CreateSphere('atmo-particles', { diameter: 0.1, segments: 4 }, this.scene);
+        const particleMaterial = new BABYLON.StandardMaterial('atmo-material', this.scene);
+        particleMaterial.emissiveColor = BABYLON.Color3.FromHexString('#00d4ff');
+        particleMaterial.alpha = 0;
+        starSystem.material = particleMaterial;
 
-        for (let i = 0; i < particleCount * 3; i += 3) {
-            positions[i] = (Math.random() - 0.5) * 400;
-            positions[i + 1] = Math.random() * 200;
-            positions[i + 2] = (Math.random() - 0.5) * 400;
+        for (let i = 0; i < 160; i++) {
+            const particle = starSystem.clone(`particle-${i}`) as BABYLON.Mesh;
+            if (!particle) continue;
+            particle.position = new BABYLON.Vector3((Math.random() - 0.5) * 360, Math.random() * 160 + 10, (Math.random() - 0.5) * 360);
+            particle.scaling = new BABYLON.Vector3(1, 1, 1);
         }
 
-        particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        const particleMaterial = new THREE.PointsMaterial({
-            color: 0x00d4ff,
-            size: 0.5,
-            opacity: 0.6,
-            transparent: true,
-        });
-
-        const particles = new THREE.Points(particleGeometry, particleMaterial);
-        this.scene.add(particles);
+        starSystem.dispose();
     }
 
     public render(): void {
-        this.renderer.render(this.scene, this.camera);
+        this.scene.render();
     }
 
-    public getScene(): THREE.Scene {
+    public getScene(): BABYLON.Scene {
         return this.scene;
     }
 
-    public getCamera(): THREE.PerspectiveCamera {
+    public getCamera(): BABYLON.ArcRotateCamera {
         return this.camera;
     }
 
-    public getRenderer(): THREE.WebGLRenderer {
-        return this.renderer;
-    }
-
     public onWindowResize(): void {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-
-        this.camera.aspect = width / height;
-        this.camera.updateProjectionMatrix();
-
-        this.renderer.setSize(width, height);
+        this.engine.resize();
     }
 
     public updateCameraRotation(rotationX: number, rotationY: number): void {
-        // Apply rotation to camera
-        // Rotations are applied around the player's position
-        // This provides a way to look around while the player moves
-        const currentPos = this.camera.position.clone();
-        const distance = 25;
-        const height = 8;
+        this.camera.alpha += rotationY;
+        this.camera.beta = Math.max(0.3, Math.min(1.25, this.camera.beta + rotationX));
+    }
 
-        // Calculate new camera position based on rotation
-        const x = Math.sin(rotationY) * distance;
-        const z = Math.cos(rotationY) * distance;
-        const y = height + Math.sin(rotationX) * 5;
-
-        this.camera.position.set(x, y, z);
-        // Camera continues to look at the player (will be updated by player.ts)
+    public updateCameraTarget(target: BABYLON.Vector3): void {
+        this.camera.setTarget(target);
     }
 
     public dispose(): void {
-        this.renderer.dispose();
+        this.scene.dispose();
+        this.engine.dispose();
         if (this.canvas?.parentElement) {
             this.canvas.parentElement.removeChild(this.canvas);
         }

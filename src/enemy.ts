@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 
 export interface EnemyStats {
     level: number;
@@ -11,21 +11,21 @@ export interface EnemyStats {
 }
 
 export class Enemy {
-    public position: THREE.Vector3;
-    public velocity: THREE.Vector3;
+    public position: BABYLON.Vector3;
+    public velocity: BABYLON.Vector3;
     public radius: number = 0.5;
     public stats: EnemyStats;
     public age: number = 0;
     
-    private mesh: THREE.Mesh;
-    private scene: THREE.Scene;
-    private targetPosition: THREE.Vector3;
+    private mesh: BABYLON.Mesh;
+    private scene: BABYLON.Scene;
+    private targetPosition: BABYLON.Vector3;
     private moveTimer: number = 0;
 
-    constructor(scene: THREE.Scene, position: THREE.Vector3, level: number) {
+    constructor(scene: BABYLON.Scene, position: BABYLON.Vector3, level: number) {
         this.scene = scene;
         this.position = position.clone();
-        this.velocity = new THREE.Vector3();
+        this.velocity = BABYLON.Vector3.Zero();
         this.targetPosition = position.clone();
 
         // Generate enemy stats based on level
@@ -41,38 +41,34 @@ export class Enemy {
         };
 
         this.mesh = this.createMesh();
-        this.scene.add(this.mesh);
         this.updateMesh();
     }
 
-    private createMesh(): THREE.Mesh {
-        const geometry = new THREE.OctahedronGeometry(this.radius, 2);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0xff4444,
-            roughness: 0.6,
-            metalness: 0.2,
-            emissive: 0x990000,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+    private createMesh(): BABYLON.Mesh {
+        const mesh = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
+        const material = new BABYLON.StandardMaterial('enemy-material', this.scene);
+        material.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
+        material.emissiveColor = BABYLON.Color3.FromHexString('#990000');
+        material.specularColor = BABYLON.Color3.FromHexString('#442222');
+        mesh.material = material;
+        mesh.receiveShadows = true;
         return mesh;
     }
 
-    public update(deltaTime: number, playerPos: THREE.Vector3): void {
+    public update(deltaTime: number, playerPos: BABYLON.Vector3): void {
         this.age += deltaTime;
         this.moveTimer += deltaTime;
 
         // Update target position every 2 seconds or randomly move
         if (this.moveTimer > 2) {
-            const distance = this.position.distanceTo(playerPos);
+            const distance = BABYLON.Vector3.Distance(this.position, playerPos);
             
             if (distance < 20) {
                 // Chase player if nearby
-                this.targetPosition.copy(playerPos);
+                this.targetPosition.copyFrom(playerPos);
             } else {
                 // Random wandering
-                this.targetPosition.copy(this.position);
+                this.targetPosition.copyFrom(this.position);
                 this.targetPosition.x += (Math.random() - 0.5) * 30;
                 this.targetPosition.z += (Math.random() - 0.5) * 30;
             }
@@ -80,31 +76,34 @@ export class Enemy {
         }
 
         // Move towards target
-        const direction = this.targetPosition.clone().sub(this.position).normalize();
-        this.velocity.copy(direction.multiplyScalar(this.stats.speed));
-        this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+        const direction = this.targetPosition.subtract(this.position);
+        if (direction.lengthSquared() > 0.0001) {
+            direction.normalize();
+        }
+        this.velocity = direction.scale(this.stats.speed);
+        this.position.addInPlace(this.velocity.scale(deltaTime));
 
         // Boundary constraints
         this.position.x = Math.max(-100, Math.min(100, this.position.x));
         this.position.z = Math.max(-100, Math.min(100, this.position.z));
 
         // Apply friction
-        this.velocity.multiplyScalar(0.9);
+        this.velocity.scaleInPlace(0.9);
 
         this.updateMesh();
     }
 
     private updateMesh(): void {
-        this.mesh.position.copy(this.position);
-        this.mesh.scale.setScalar(this.stats.size);
+        this.mesh.position.copyFrom(this.position);
+        this.mesh.scaling.setAll(this.stats.size);
 
         // Color based on level (red shades)
-        const hue = 0; // Red
         const saturation = 0.7 + (this.stats.level / 30) * 0.3;
         const lightness = 0.4 + (this.stats.level / 30) * 0.1;
-        const color = new THREE.Color().setHSL(hue, saturation, lightness);
-        (this.mesh.material as THREE.MeshStandardMaterial).color = color;
-        (this.mesh.material as THREE.MeshStandardMaterial).emissive = color;
+        const color = BABYLON.Color3.FromHSV(0, saturation, lightness);
+        const material = this.mesh.material as BABYLON.StandardMaterial;
+        material.diffuseColor = color;
+        material.emissiveColor = color.scale(0.55);
     }
 
     public takeDamage(amount: number): void {
@@ -120,8 +119,6 @@ export class Enemy {
     }
 
     public dispose(): void {
-        this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        (this.mesh.material as THREE.Material).dispose();
+        this.mesh.dispose();
     }
 }

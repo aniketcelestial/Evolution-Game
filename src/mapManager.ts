@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as BABYLON from '@babylonjs/core';
 import { Enemy } from './enemy';
 import { FoodManager } from './food';
 
@@ -74,11 +74,11 @@ export class MapManager {
         },
     ];
 
-    private scene: THREE.Scene;
-    private gridHelper: THREE.GridHelper | null = null;
+    private scene: BABYLON.Scene;
+    private ground: BABYLON.Mesh | null = null;
     private foodManager: FoodManager | null = null;
 
-    constructor(scene: THREE.Scene) {
+    constructor(scene: BABYLON.Scene) {
         this.scene = scene;
     }
 
@@ -93,16 +93,24 @@ export class MapManager {
         const config = this.mapConfigs[mapIndex];
 
         // Update scene background
-        this.scene.background = new THREE.Color(config.backgroundColor);
-        this.scene.fog = new THREE.Fog(config.backgroundColor, config.size * 2, config.size * 3);
+        this.scene.clearColor = BABYLON.Color4.FromColor3(BABYLON.Color3.FromHexString(`#${config.backgroundColor.toString(16).padStart(6, '0')}`));
+        this.scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+        this.scene.fogColor = BABYLON.Color3.FromHexString(`#${config.backgroundColor.toString(16).padStart(6, '0')}`);
+        this.scene.fogStart = config.size * 1.5;
+        this.scene.fogEnd = config.size * 3;
 
-        // Update grid
-        if (this.gridHelper) {
-            this.scene.remove(this.gridHelper);
+        // Update ground grid
+        if (this.ground) {
+            this.ground.dispose();
         }
-        this.gridHelper = new THREE.GridHelper(config.size, config.size / 10, 0x00d4ff, config.gridColor);
-        (this.gridHelper as any).position.y = 0.01;
-        this.scene.add(this.gridHelper);
+        this.ground = BABYLON.MeshBuilder.CreateGround('map-ground', { width: config.size, height: config.size, subdivisions: 2 }, this.scene);
+        const groundMaterial = new BABYLON.StandardMaterial('map-ground-material', this.scene);
+        groundMaterial.diffuseColor = BABYLON.Color3.FromHexString('#1a3a4a');
+        groundMaterial.emissiveColor = BABYLON.Color3.FromHexString(`#${config.gridColor.toString(16).padStart(6, '0')}`);
+        groundMaterial.specularColor = BABYLON.Color3.Black();
+        groundMaterial.wireframe = true;
+        groundMaterial.alpha = 0.35;
+        this.ground.material = groundMaterial;
 
         console.log(`Loaded map: ${config.name}`);
     }
@@ -124,7 +132,7 @@ export class MapManager {
                 )
             );
 
-            const enemy = new Enemy(this.scene, new THREE.Vector3(x, 1, z), Math.floor(enemyLevel));
+            const enemy = new Enemy(this.scene, new BABYLON.Vector3(x, 1, z), Math.floor(enemyLevel));
             enemies.push(enemy);
         }
 
@@ -148,8 +156,9 @@ export class MapManager {
     }
 
     public dispose(): void {
-        if (this.gridHelper) {
-            this.scene.remove(this.gridHelper);
+        if (this.ground) {
+            this.ground.dispose();
+            this.ground = null;
         }
     }
 }
