@@ -104,22 +104,45 @@ export function createSnakeModel(scene: BABYLON.Scene, length = 6, size = 1, nam
     return root;
 }
 
-export function createSlitherTube(scene: BABYLON.Scene, path: BABYLON.Vector3[], size = 1, name = 'slither-tube') {
+export function createSlitherTube(scene: BABYLON.Scene, path: BABYLON.Vector3[], size = 1, name = 'slither-tube', instance?: BABYLON.Mesh) {
     // Create a tapered tube along given path. Caller should supply a short, sampled path.
-    const tube = BABYLON.MeshBuilder.CreateTube(name, {
+    const options: any = {
         path,
         radius: 0.18 * size,
         tessellation: 20,
-        radiusFunction: (i, distance) => {
+        radiusFunction: (i: number) => {
             const t = i / Math.max(1, path.length - 1);
             return 0.18 * size * (1 - 0.5 * t);
         },
-        updatable: false,
-    }, scene);
+        updatable: !!instance,
+    };
+    if (instance) options.instance = instance;
 
-    const mat = new BABYLON.StandardMaterial(name + '-mat', scene);
-    mat.diffuseColor = BABYLON.Color3.FromHexString('#00c86b');
-    mat.specularPower = 8;
-    tube.material = mat;
+    const tube = BABYLON.MeshBuilder.CreateTube(name, options, scene) as BABYLON.Mesh;
+
+    if (!tube.material) {
+        const mat = new BABYLON.StandardMaterial(name + '-mat', scene);
+        mat.diffuseColor = BABYLON.Color3.FromHexString('#00c86b');
+        mat.specularPower = 8;
+        tube.material = mat;
+    }
     return tube;
+}
+
+// Try to load a glTF/.glb model if available. Returns the root node on success, or null on failure.
+export async function tryLoadGLTF(scene: BABYLON.Scene, url: string, nameHint = 'model') : Promise<BABYLON.TransformNode | null> {
+    try {
+        // Use a dynamic variable import so bundlers won't statically require the module.
+        const loaderName = '@babylonjs/loaders';
+        await import(loaderName);
+        const parts = url.split('/');
+        const file = parts.pop() || url;
+        const rootUrl = parts.length ? parts.join('/') + '/' : '';
+        const result = await BABYLON.SceneLoader.ImportMeshAsync('', rootUrl, file, scene);
+        const root = new BABYLON.TransformNode(nameHint + '-gltf-root', scene);
+        result.meshes.forEach(m => (m.parent = root));
+        return root;
+    } catch (e) {
+        return null;
+    }
 }

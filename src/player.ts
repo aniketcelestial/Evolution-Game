@@ -26,6 +26,8 @@ export class Player {
     private bodySegmentCount: number = 0;
     private trailPoints: BABYLON.Vector3[] = [];
     private slitherMesh: BABYLON.Mesh | null = null;
+    private slitherUpdateTimer: number = 0;
+    private slitherUpdateInterval: number = 0.06; // seconds between geometry updates
     private scene: BABYLON.Scene;
     private camera: BABYLON.ArcRotateCamera;
     private dashCooldown: number = 0;
@@ -129,8 +131,15 @@ export class Player {
             }
         }
 
-        this.updateMesh();
-        this.updateCamera();
+        // throttle slither geometry updates to improve performance
+        this.slitherUpdateTimer += deltaTime;
+        if (this.slitherUpdateTimer >= this.slitherUpdateInterval) {
+            this.updateMesh();
+            this.slitherUpdateTimer = 0;
+        } else {
+            // still update camera each frame for responsiveness
+            this.updateCamera();
+        }
     }
 
     private updateMesh(): void {
@@ -173,16 +182,20 @@ export class Player {
         // ensure head point is included
         path.unshift(this.position.clone());
 
-        if (this.slitherMesh) {
-            try { this.slitherMesh.dispose(); } catch (e) {}
-            this.slitherMesh = null;
-        }
-
+        // reuse existing mesh when possible by calling the factory with instance
         if (path.length >= 2) {
-            this.slitherMesh = createSlitherTube(this.scene, path, this.stats.size, `player-slither-${Date.now()}`);
-            const mat = this.slitherMesh.material as BABYLON.StandardMaterial;
-            mat.diffuseColor = color;
-            mat.emissiveColor = color.scale(0.25);
+            if (this.slitherMesh) {
+                // update existing tube geometry
+                createSlitherTube(this.scene, path, this.stats.size, this.slitherMesh.name || `player-slither`, this.slitherMesh);
+                const mat = this.slitherMesh.material as BABYLON.StandardMaterial;
+                mat.diffuseColor = color;
+                mat.emissiveColor = color.scale(0.25);
+            } else {
+                this.slitherMesh = createSlitherTube(this.scene, path, this.stats.size, `player-slither-${Date.now()}`);
+                const mat = this.slitherMesh.material as BABYLON.StandardMaterial;
+                mat.diffuseColor = color;
+                mat.emissiveColor = color.scale(0.25);
+            }
         }
     }
 

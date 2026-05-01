@@ -1,5 +1,5 @@
 import * as BABYLON from '@babylonjs/core';
-import { createAntModel, createBeeModel, createSnakeModel, createSlitherTube } from './modelFactory';
+import { createAntModel, createBeeModel, createSnakeModel, createSlitherTube, tryLoadGLTF } from './modelFactory';
 
 export interface EnemyStats {
     level: number;
@@ -92,26 +92,55 @@ export class Enemy {
     }
 
     private createMesh(): BABYLON.Mesh {
-        // Use the model factory to produce more accurate visuals per species.
+        // Create a provisional model immediately, then try to replace with a glTF model if one exists at assets/models/{species}.glb
+        const provisionalName = `enemy-proxy-${this.species}-${Math.floor(Math.random() * 10000)}`;
+        let provisional: BABYLON.Mesh | BABYLON.TransformNode;
         switch (this.species) {
             case 'ant':
-                return createAntModel(this.scene, this.stats.size, `enemy-ant-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
+                provisional = createAntModel(this.scene, this.stats.size, provisionalName);
+                break;
             case 'bee':
-                return createBeeModel(this.scene, this.stats.size, `enemy-bee-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
+                provisional = createBeeModel(this.scene, this.stats.size, provisionalName);
+                break;
             case 'slither':
-                // simple tapered tube for small slither enemy
-                const slitherRoot = createSlitherTube(this.scene, [new BABYLON.Vector3(0,0,0), new BABYLON.Vector3(-0.8,0,0)], this.stats.size, `enemy-slither-${Math.floor(Math.random() * 10000)}`);
-                return slitherRoot as unknown as BABYLON.Mesh;
+                provisional = createSlitherTube(this.scene, [new BABYLON.Vector3(0,0,0), new BABYLON.Vector3(-0.8,0,0)], this.stats.size, provisionalName) as unknown as BABYLON.TransformNode;
+                break;
             case 'snake':
-                return createSnakeModel(this.scene, 8, this.stats.size, `enemy-snake-${Math.floor(Math.random() * 10000)}`) as unknown as BABYLON.Mesh;
+                provisional = createSnakeModel(this.scene, 8, this.stats.size, provisionalName);
+                break;
             default:
-                const fallback = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
-                const mat = new BABYLON.StandardMaterial('enemy-material', this.scene);
+                const fallback = BABYLON.MeshBuilder.CreateIcoSphere(provisionalName, { radius: this.radius, subdivisions: 2 }, this.scene);
+                const mat = new BABYLON.StandardMaterial(provisionalName + '-mat', this.scene);
                 mat.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
                 fallback.material = mat;
                 fallback.receiveShadows = true;
-                return fallback;
+                provisional = fallback;
         }
+
+        // attempt to load a glTF model from assets/models/{species}.glb and replace the provisional mesh if available
+        (async () => {
+            // try both .glb and .gltf extensions so developers can drop either format in assets/models/
+            const candidates = [`assets/models/${this.species}.glb`, `assets/models/${this.species}.gltf`];
+            let loaded = null as any;
+            for (const url of candidates) {
+                loaded = await tryLoadGLTF(this.scene, url, `enemy-${this.species}`);
+                if (loaded) break;
+            }
+            if (loaded) {
+                try {
+                    // position and scale the loaded root to match provisional
+                    loaded.position.copyFrom(provisional.position || BABYLON.Vector3.Zero());
+                    loaded.scaling = new BABYLON.Vector3(this.stats.size, this.stats.size, this.stats.size);
+                    // dispose provisional
+                    try { (provisional as any).dispose(); } catch (e) {}
+                    this.mesh = loaded;
+                } catch (e) {
+                    // ignore replacement errors
+                }
+            }
+        })();
+
+        return provisional as unknown as BABYLON.Mesh;
     }
 
     public update(deltaTime: number, playerPos: BABYLON.Vector3): void {
