@@ -21,6 +21,8 @@ export class Enemy {
     public actionPoints: number = 1;
     
     private mesh: BABYLON.AbstractMesh | BABYLON.TransformNode;
+    private detailed: boolean = false;
+    private desiredSpecies: string;
     private scene: BABYLON.Scene;
     private targetPosition: BABYLON.Vector3;
     private moveTimer: number = 0;
@@ -35,6 +37,7 @@ export class Enemy {
         // choose species randomly if not provided
         const speciesList = ['ant', 'slither', 'bee', 'snake'];
         this.species = species || speciesList[Math.floor(Math.random() * speciesList.length)];
+        this.desiredSpecies = this.species;
 
         // Generate base enemy stats based on level
         const levelFactor = 1 + (level - 1) * 0.2;
@@ -87,60 +90,74 @@ export class Enemy {
             experienceReward: 50 * levelFactor,
         };
 
-        this.mesh = this.createMesh();
+        // create a lightweight placeholder first; promote to detailed model when near player
+        this.mesh = this.createPlaceholderMesh();
         this.updateMesh();
     }
 
-    private createMesh(): BABYLON.Mesh {
-        // Create a provisional model immediately, then try to replace with a glTF model if one exists at assets/models/{species}.glb
-        const provisionalName = `enemy-proxy-${this.species}-${Math.floor(Math.random() * 10000)}`;
-        let provisional: BABYLON.Mesh | BABYLON.TransformNode;
-        switch (this.species) {
+
+
+    private createMeshForSpecies(speciesOverride?: string): BABYLON.Mesh | BABYLON.TransformNode {
+        const sp = speciesOverride || this.species;
+        switch (sp) {
             case 'ant':
-                provisional = createAntModel(this.scene, this.stats.size, provisionalName);
-                break;
+                return createAntModel(this.scene, this.stats.size, `enemy-ant-${Math.floor(Math.random() * 10000)}`);
             case 'bee':
-                provisional = createBeeModel(this.scene, this.stats.size, provisionalName);
-                break;
+                return createBeeModel(this.scene, this.stats.size, `enemy-bee-${Math.floor(Math.random() * 10000)}`);
             case 'slither':
-                provisional = createSlitherTube(this.scene, [new BABYLON.Vector3(0,0,0), new BABYLON.Vector3(-0.8,0,0)], this.stats.size, provisionalName) as unknown as BABYLON.TransformNode;
-                break;
+                return createSlitherTube(this.scene, [new BABYLON.Vector3(0,0,0), new BABYLON.Vector3(-0.8,0,0)], this.stats.size, `enemy-slither-${Math.floor(Math.random() * 10000)}`);
             case 'snake':
-                provisional = createSnakeModel(this.scene, 8, this.stats.size, provisionalName);
-                break;
+                return createSnakeModel(this.scene, 8, this.stats.size, `enemy-snake-${Math.floor(Math.random() * 10000)}`);
             default:
-                const fallback = BABYLON.MeshBuilder.CreateIcoSphere(provisionalName, { radius: this.radius, subdivisions: 2 }, this.scene);
-                const mat = new BABYLON.StandardMaterial(provisionalName + '-mat', this.scene);
+                const fallback = BABYLON.MeshBuilder.CreateIcoSphere(`enemy-fallback-${Math.floor(Math.random() * 10000)}`, { radius: this.radius, subdivisions: 2 }, this.scene);
+                const mat = new BABYLON.StandardMaterial('enemy-material', this.scene);
                 mat.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
                 fallback.material = mat;
                 fallback.receiveShadows = true;
-                provisional = fallback;
+                return fallback;
         }
+    }
 
-        // attempt to load a glTF model from assets/models/{species}.glb and replace the provisional mesh if available
-        (async () => {
-            // try both .glb and .gltf extensions so developers can drop either format in assets/models/
-            const candidates = [`assets/models/${this.species}.glb`, `assets/models/${this.species}.gltf`];
-            let loaded = null as any;
+    private createPlaceholderMesh(): BABYLON.Mesh {
+        const name = `enemy-placeholder-${Math.floor(Math.random() * 100000)}`;
+        const sphere = BABYLON.MeshBuilder.CreateSphere(name, { diameter: this.radius * 1.2, segments: 6 }, this.scene);
+        const mat = new BABYLON.StandardMaterial(name + '-mat', this.scene);
+        // color by species
+        switch (this.species) {
+            case 'ant': mat.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a'); break;
+            case 'bee': mat.diffuseColor = BABYLON.Color3.FromHexString('#ffd24d'); break;
+            case 'slither': mat.diffuseColor = BABYLON.Color3.FromHexString('#2aa65b'); break;
+            case 'snake': mat.diffuseColor = BABYLON.Color3.FromHexString('#8b2b2b'); break;
+            default: mat.diffuseColor = BABYLON.Color3.FromHexString('#999999');
+        }
+        sphere.material = mat;
+        return sphere;
+    }
+
+    private async promoteToDetailedModel() {
+        if (this.detailed) return;
+        this.detailed = true;
+        // create detailed mesh and replace placeholder
+        try {
+            const detailed = this.createMeshForSpecies(this.desiredSpecies);
+            // try loading glTF if available
+            const candidates = [`assets/models/${this.desiredSpecies}.glb`, `assets/models/${this.desiredSpecies}.gltf`];
             for (const url of candidates) {
-                loaded = await tryLoadGLTF(this.scene, url, `enemy-${this.species}`);
-                if (loaded) break;
-            }
-            if (loaded) {
-                try {
-                    // position and scale the loaded root to match provisional
-                    loaded.position.copyFrom(provisional.position || BABYLON.Vector3.Zero());
-                    loaded.scaling = new BABYLON.Vector3(this.stats.size, this.stats.size, this.stats.size);
-                    // dispose provisional
-                    try { (provisional as any).dispose(); } catch (e) {}
+                const loaded = await tryLoadGLTF(this.scene, url, `enemy-${this.desiredSpecies}`);
+                if (loaded) {
+                    try { (detailed as any).dispose?.(); } catch (e) {}
                     this.mesh = loaded;
-                } catch (e) {
-                    // ignore replacement errors
+                    this.updateMesh();
+                    return;
                 }
             }
-        })();
-
-        return provisional as unknown as BABYLON.Mesh;
+            // no glTF; use procedural detailed
+            try { (this.mesh as any).dispose?.(); } catch (e) {}
+            this.mesh = detailed;
+            this.updateMesh();
+        } catch (e) {
+            console.warn('Failed to promote enemy to detailed model', e);
+        }
     }
 
     public update(deltaTime: number, playerPos: BABYLON.Vector3): void {
@@ -169,7 +186,25 @@ export class Enemy {
             direction.normalize();
         }
         this.velocity = direction.scale(this.stats.speed);
-        this.position.addInPlace(this.velocity.scale(deltaTime));
+        // Position integration is now deferred to batch integration in game loop
+
+        // Apply friction
+        this.velocity.scaleInPlace(0.9);
+
+        this.updateMesh();
+
+        // Promote to detailed model when player is near (LOD)
+        const distToPlayer = BABYLON.Vector3.Distance(this.position, playerPos);
+        if (!this.detailed && distToPlayer < 18) {
+            this.promoteToDetailedModel();
+        }
+    }
+
+    // Apply constraints after batch position integration
+    public applyConstraints(): void {
+        // Boundary constraints
+        this.position.x = Math.max(-100, Math.min(100, this.position.x));
+        this.position.z = Math.max(-100, Math.min(100, this.position.z));
 
         // Obstacle collision avoidance: push out of mountain spheres
         for (const obs of this.obstacles) {
@@ -180,19 +215,9 @@ export class Enemy {
             if (dist < minDist) {
                 const pushDir = toObs.normalize();
                 this.position = obs.position.add(pushDir.scale(minDist));
-                // reduce velocity to avoid jitter
                 this.velocity.scaleInPlace(0.3);
             }
         }
-
-        // Boundary constraints
-        this.position.x = Math.max(-100, Math.min(100, this.position.x));
-        this.position.z = Math.max(-100, Math.min(100, this.position.z));
-
-        // Apply friction
-        this.velocity.scaleInPlace(0.9);
-
-        this.updateMesh();
     }
 
     private updateMesh(): void {

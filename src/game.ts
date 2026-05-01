@@ -9,6 +9,7 @@ import { LevelProgressionSystem } from './levelSystem';
 import { MapManager } from './mapManager';
 import { MobileControls, MapView } from './mobile';
 import { PlayerControlInput } from './controls';
+import { PhysicsBatcher } from './wasm/batcher';
 
 export class Game {
     private scene3D: Scene3D | null = null;
@@ -34,6 +35,7 @@ export class Game {
     private isPaused: boolean = false;
     private gameTime: number = 0;
     private simulationSpeed: number = 1;
+    private physicsBatcher: PhysicsBatcher = new PhysicsBatcher();
     
     // Input handling
     private input = {
@@ -472,69 +474,90 @@ export class Game {
         this.animationFrameId = requestAnimationFrame(this.animate);
 
         if (this.isRunning && !this.isPaused) {
-            const deltaTime = (1 / 60) * this.simulationSpeed;
+            try {
+                const deltaTime = (1 / 60) * this.simulationSpeed;
 
-            const controlState = this.buildControlState();
+                const controlState = this.buildControlState();
 
-            // Update player
-            this.player?.update(deltaTime, controlState);
+                // Update player
+                this.player?.update(deltaTime, controlState);
 
-            if (controlState.interact) {
-                this.combatSystem?.triggerInteraction();
-            }
-
-            // Update enemies
-            for (let i = this.enemies.length - 1; i >= 0; i--) {
-                const enemy = this.enemies[i];
-                if (enemy.isAlive()) {
-                    enemy.update(deltaTime, this.player!.getPosition());
-                } else {
-                    enemy.dispose();
-                    this.enemies.splice(i, 1);
+                if (controlState.interact) {
+                    this.combatSystem?.triggerInteraction();
                 }
-            }
 
-            // Update food
-            this.foodManager?.update(deltaTime);
-
-            // Combat/collision detection
-            this.combatSystem?.update();
-
-            // Check if player is dead
-            if (!this.player?.isAlive()) {
-                this.gameOverEvent();
-            }
-
-            // Respawn enemies if count drops
-            if (this.enemies.length < 10 && this.mapManager) {
-                const newEnemies = this.mapManager.generateEnemies(5, this.player!.stats.level);
-                const obstacles = this.mapManager.getMountains();
-                for (const ne of newEnemies) {
-                    ne.setObstacles(obstacles);
+                // Update enemies
+                for (let i = this.enemies.length - 1; i >= 0; i--) {
+                    const enemy = this.enemies[i];
+                    if (enemy.isAlive()) {
+                        enemy.update(deltaTime, this.player!.getPosition());
+                    } else {
+                        enemy.dispose();
+                        this.enemies.splice(i, 1);
+                    }
                 }
-                this.enemies.push(...newEnemies);
-            }
 
-            // Check for map transitions
-            this.checkMapTransition();
+                // Batch integrate all entity positions via WASM (or JS fallback)
+                if (this.player) {
+                    this.physicsBatcher.add(this.player);
+                }
+                for (const enemy of this.enemies) {
+                    if (enemy.isAlive()) {
+                        this.physicsBatcher.add(enemy);
+                    }
+                }
+                this.physicsBatcher.integrateAll(deltaTime);
 
-            // Update game time
-            this.gameTime += deltaTime;
+                // Apply constraints (boundary and collision) to each entity post-integration
+                this.player?.applyConstraints();
+                for (const enemy of this.enemies) {
+                    enemy.applyConstraints();
+                }
 
-            // Update HUD every frame
-            this.updateHUD();
+                // Update food
+                this.foodManager?.update(deltaTime);
 
-            // Update map view
-            if (this.mapView && this.player) {
-                const foods = this.foodManager?.getFoods().map(f => ({
-                    position: f.position
-                })) || [];
-                const enemiesData = this.enemies.map(e => ({
-                    position: e.position,
-                    alive: e.isAlive()
-                }));
-                const mapSize = this.mapManager?.getMapBounds().size || 200;
-                this.mapView.updateMap(this.player.getPosition(), enemiesData, foods, mapSize);
+                // Combat/collision detection
+                this.combatSystem?.update();
+
+                // Check if player is dead
+                if (!this.player?.isAlive()) {
+                    this.gameOverEvent();
+                }
+
+                // Respawn enemies if count drops
+                if (this.enemies.length < 10 && this.mapManager) {
+                    const newEnemies = this.mapManager.generateEnemies(5, this.player!.stats.level);
+                    const obstacles = this.mapManager.getMountains();
+                    for (const ne of newEnemies) {
+                        ne.setObstacles(obstacles);
+                    }
+                    this.enemies.push(...newEnemies);
+                }
+
+                // Check for map transitions
+                this.checkMapTransition();
+
+                // Update game time
+                this.gameTime += deltaTime;
+
+                // Update HUD every frame
+                this.updateHUD();
+
+                // Update map view
+                if (this.mapView && this.player) {
+                    const foods = this.foodManager?.getFoods().map(f => ({
+                        position: f.position
+                    })) || [];
+                    const enemiesData = this.enemies.map(e => ({
+                        position: e.position,
+                        alive: e.isAlive()
+                    }));
+                    const mapSize = this.mapManager?.getMapBounds().size || 200;
+                    this.mapView.updateMap(this.player.getPosition(), enemiesData, foods, mapSize);
+                }
+            } catch (err) {
+                console.error('Error during game update loop:', err);
             }
         }
 

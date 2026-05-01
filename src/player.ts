@@ -1,6 +1,8 @@
 import * as BABYLON from '@babylonjs/core';
 import { PlayerControlInput } from './controls';
 import { createSlitherTube } from './modelFactory';
+import { integratePositions, initPhysicsWasm, hasWasm } from './wasm/loader';
+import { PhysicsEntity } from './wasm/batcher';
 
 export interface PlayerStats {
     level: number;
@@ -35,6 +37,7 @@ export class Player {
     private dashDirection: BABYLON.Vector3 = BABYLON.Vector3.Zero();
     private movementBoundary: number = 100;
     private obstacles: Array<{ position: BABYLON.Vector3; radius: number }> = [];
+    private lastIntegratedPos: BABYLON.Vector3 = BABYLON.Vector3.Zero();
 
     constructor(scene: BABYLON.Scene, camera: BABYLON.ArcRotateCamera, position: BABYLON.Vector3) {
         this.scene = scene;
@@ -56,6 +59,13 @@ export class Player {
         this.mesh = this.createMesh();
         this.buildBodySegments();
         this.updateMesh();
+
+        // Try to initialize WASM physics module (optional)
+        initPhysicsWasm().then(ok => {
+            if (ok) {
+                console.log('Physics WASM initialized for player');
+            }
+        }).catch(() => {});
     }
 
     private createMesh(): BABYLON.Mesh {
@@ -105,31 +115,16 @@ export class Player {
         }
 
         this.velocity = BABYLON.Vector3.Lerp(this.velocity, targetVelocity, Math.min(1, deltaTime * 8));
-        this.position.addInPlace(this.velocity.scale(deltaTime));
+        // Position integration is now deferred to batch integration in game loop
+        // (see game.ts animate() and PhysicsBatcher usage)
 
         // Only extend the trail while moving; otherwise the body would collapse into the head.
         if (this.velocity.lengthSquared() > 0.0001) {
             this.pushTrailPoint();
         }
 
-        // Boundary constraints (use runtime movementBoundary)
-        const b = this.movementBoundary;
-        this.position.x = Math.max(-b, Math.min(b, this.position.x));
-        this.position.z = Math.max(-b, Math.min(b, this.position.z));
-
-        // Obstacle collision: simple push-out from mountain spheres
-        for (const obs of this.obstacles) {
-            const toObs = this.position.subtract(obs.position);
-            const dist = toObs.length();
-            if (dist <= 0.0001) continue;
-            const minDist = this.getRadius() + obs.radius + 0.2; // small padding
-            if (dist < minDist) {
-                const pushDir = toObs.normalize();
-                this.position = obs.position.add(pushDir.scale(minDist));
-                // reduce velocity on collision
-                this.velocity.scaleInPlace(0.2);
-            }
-        }
+        // Boundary constraints and obstacle collision are applied in a post-integration pass
+        // in game.ts (see applyConstraints() method)
 
         // throttle slither geometry updates to improve performance
         this.slitherUpdateTimer += deltaTime;
@@ -295,6 +290,25 @@ export class Player {
 
     public getRadius(): number {
         return this.radius * this.stats.size;
+    }
+
+    // Apply boundary and obstacle constraints after batch position integration
+    public applyConstraints(): void {
+        const b = this.movementBoundary;
+        this.position.x = Math.max(-b, Math.min(b, this.position.x));
+        this.position.z = Math.max(-b, Math.min(b, this.position.z));
+
+        for (const obs of this.obstacles) {
+            const toObs = this.position.subtract(obs.position);
+            const dist = toObs.length();
+            if (dist <= 0.0001) continue;
+            const minDist = this.getRadius() + obs.radius + 0.2;
+            if (dist < minDist) {
+                const pushDir = toObs.normalize();
+                this.position = obs.position.add(pushDir.scale(minDist));
+                this.velocity.scaleInPlace(0.2);
+            }
+        }
     }
 
     public dispose(): void {

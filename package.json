@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+"build:wasm": "emcc src/wasm/physics.cpp -O3 -s WASM=1 -s MODULARIZE=1 -s EXPORT_NAME=\\\"createPhysicsModule\\\" -s EXPORTED_FUNCTIONS=\\\"['_integrate_positions','_malloc','_free']\\\" -o dist/physics.js",
     "preview": "vite preview"
   },
   "dependencies": {
