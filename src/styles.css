@@ -893,3 +893,57 @@ html, body {
 .hud-controls {
     margin-right: env(safe-area-inset-right);
 }
+
+/* Final mobile control clamps: keep map/action controls inside viewport on narrow landscape */
+@media (max-width: 900px) and (orientation: landscape) {
+    .mobile-action-panel {
+        right: max(8px, env(safe-area-inset-right));
+        bottom: max(8px, env(safe-area-inset-bottom));
+        left: auto;
+        width: min(52vw, 250px);
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+
+    .action-button {
+        min-width: 0;
+        width: 100%;
+        height: clamp(48px, 13vh, 62px);
+        padding: 0.3rem 0.35rem;
+        font-size: 0.66rem;
+        border-radius: 12px;
+    }
+
+    .action-icon {
+        font-size: 1rem;
+    }
+
+    .action-label {
+        font-size: 0.58rem;
+        line-height: 1;
+    }
+
+    .map-btn {
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+        bottom: auto;
+        left: auto;
+        transform: none;
+        max-width: 32vw;
+        white-space: nowrap;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.72rem;
+        z-index: 46;
+    }
+
+    .map-view-container {
+        top: calc(max(8px, env(safe-area-inset-top)) + 40px);
+        right: max(8px, env(safe-area-inset-right));
+        bottom: auto;
+        width: min(36vw, 170px);
+        max-height: 42vh;
+        overflow: hidden;
+        z-index: 45;
+    }
+}

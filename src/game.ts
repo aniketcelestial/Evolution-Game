@@ -28,6 +28,7 @@ export class Game {
         interact: false,
     };
     private mapButtonListenerAttached: boolean = false;
+    private viewportClampBound = () => this.applyMobileViewportClamp();
     
     private isRunning: boolean = false;
     private isPaused: boolean = false;
@@ -175,7 +176,13 @@ export class Game {
         // Window resize
         window.addEventListener('resize', () => {
             this.scene3D?.onWindowResize();
+            this.applyMobileViewportClamp();
         });
+
+        window.addEventListener('orientationchange', this.viewportClampBound);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', this.viewportClampBound);
+        }
     }
 
     private startGame(): void {
@@ -220,6 +227,84 @@ export class Game {
         }
 
         this.setupMapControls();
+        this.applyMobileViewportClamp();
+    }
+
+    private applyMobileViewportClamp(): void {
+        const mapBtn = document.getElementById('map-btn') as HTMLButtonElement | null;
+        const mapView = document.getElementById('map-view-container') as HTMLDivElement | null;
+        const actionPanel = document.getElementById('mobile-action-panel') as HTMLDivElement | null;
+        if (!mapBtn || !mapView || !actionPanel) return;
+
+        const vw = window.visualViewport?.width ?? window.innerWidth;
+        const vh = window.visualViewport?.height ?? window.innerHeight;
+        const isLandscape = vw > vh;
+        const isPhoneLike = Math.min(vw, vh) <= 900;
+
+        // Reset runtime styles for desktop or non-phone-like layouts.
+        if (!isLandscape || !isPhoneLike) {
+            mapBtn.style.top = '';
+            mapBtn.style.right = '';
+            mapBtn.style.bottom = '';
+            mapBtn.style.maxWidth = '';
+            mapBtn.style.fontSize = '';
+
+            mapView.style.top = '';
+            mapView.style.right = '';
+            mapView.style.bottom = '';
+            mapView.style.width = '';
+            mapView.style.maxHeight = '';
+
+            actionPanel.style.right = '';
+            actionPanel.style.bottom = '';
+            actionPanel.style.width = '';
+            actionPanel.style.display = '';
+            actionPanel.style.gridTemplateColumns = '';
+            return;
+        }
+
+        const safeRight = 8 + this.getSafeAreaInset('right');
+        const safeTop = 8 + this.getSafeAreaInset('top');
+        const safeBottom = 8 + this.getSafeAreaInset('bottom');
+
+        const mapBtnWidth = Math.max(70, Math.min(130, vw * 0.28));
+        const mapWidth = Math.max(110, Math.min(170, vw * 0.36));
+        const mapTop = safeTop + 36;
+        const actionWidth = Math.max(170, Math.min(250, vw * 0.52));
+
+        mapBtn.style.top = `${safeTop}px`;
+        mapBtn.style.right = `${safeRight}px`;
+        mapBtn.style.bottom = 'auto';
+        mapBtn.style.maxWidth = `${mapBtnWidth}px`;
+        mapBtn.style.fontSize = vw < 420 ? '0.68rem' : '0.72rem';
+
+        mapView.style.top = `${mapTop}px`;
+        mapView.style.right = `${safeRight}px`;
+        mapView.style.bottom = 'auto';
+        mapView.style.width = `${mapWidth}px`;
+        mapView.style.maxHeight = `${Math.max(120, Math.floor(vh * 0.42))}px`;
+
+        actionPanel.style.right = `${safeRight}px`;
+        actionPanel.style.bottom = `${safeBottom}px`;
+        actionPanel.style.width = `${actionWidth}px`;
+        actionPanel.style.display = 'grid';
+        actionPanel.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+    }
+
+    private getSafeAreaInset(edge: 'top' | 'right' | 'bottom' | 'left'): number {
+        const probe = document.createElement('div');
+        probe.style.position = 'fixed';
+        probe.style.visibility = 'hidden';
+        probe.style.pointerEvents = 'none';
+        probe.style.setProperty('padding-top', 'env(safe-area-inset-top)');
+        probe.style.setProperty('padding-right', 'env(safe-area-inset-right)');
+        probe.style.setProperty('padding-bottom', 'env(safe-area-inset-bottom)');
+        probe.style.setProperty('padding-left', 'env(safe-area-inset-left)');
+        document.body.appendChild(probe);
+        const computed = getComputedStyle(probe);
+        const value = parseFloat(computed.getPropertyValue(`padding-${edge}`)) || 0;
+        probe.remove();
+        return value;
     }
 
     private setupMapControls(): void {
@@ -264,6 +349,7 @@ export class Game {
         this.mapView?.hide();
         document.getElementById('map-btn')?.classList.remove('active');
         document.getElementById('map-view-container')?.classList.remove('active');
+        this.applyMobileViewportClamp();
         
         // Cleanup
         this.player?.dispose();
@@ -470,8 +556,11 @@ export class Game {
 
         const camera = this.scene3D?.getCamera();
         const alpha = camera?.alpha ?? 0;
-        const forwardVector = new BABYLON.Vector3(-Math.sin(alpha), 0, -Math.cos(alpha));
-        const rightVector = new BABYLON.Vector3(forwardVector.z, 0, -forwardVector.x);
+
+        // Use the map/camera facing direction as the movement forward axis.
+        // This keeps controller up aligned with the current view/front face.
+        const forwardVector = new BABYLON.Vector3(Math.sin(alpha), 0, Math.cos(alpha));
+        const rightVector = new BABYLON.Vector3(-forwardVector.z, 0, forwardVector.x);
         const worldMove = rightVector.scale(strafe).add(forwardVector.scale(forward));
 
         if (worldMove.lengthSquared() > 1) {
@@ -498,6 +587,10 @@ export class Game {
     }
 
     public dispose(): void {
+        window.removeEventListener('orientationchange', this.viewportClampBound);
+        if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', this.viewportClampBound);
+        }
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);
         }
