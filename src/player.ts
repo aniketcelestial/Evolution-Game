@@ -15,6 +15,7 @@ export interface PlayerStats {
 export class Player {
     public position: BABYLON.Vector3;
     public velocity: BABYLON.Vector3;
+    public facingAngle: number = 0;
     public radius: number = 0.5; // Starts tiny
     public stats: PlayerStats;
     
@@ -82,15 +83,27 @@ export class Player {
     public update(deltaTime: number, input: PlayerControlInput): void {
         this.dashCooldown = Math.max(0, this.dashCooldown - deltaTime);
 
-        const moveVector = new BABYLON.Vector3(input.moveX, 0, input.moveY);
-        if (moveVector.lengthSquared() > 1) {
-            moveVector.normalize();
+        const localMove = new BABYLON.Vector3(input.moveX, 0, input.moveY);
+        if (localMove.lengthSquared() > 1) {
+            localMove.normalize();
         }
 
-        const targetVelocity = moveVector.scale(this.stats.speed * (input.sprint ? 1.45 : 1));
+        const cosAngle = Math.cos(this.facingAngle);
+        const sinAngle = Math.sin(this.facingAngle);
+        const worldMove = new BABYLON.Vector3(
+            localMove.x * cosAngle + localMove.z * sinAngle,
+            0,
+            -localMove.x * sinAngle + localMove.z * cosAngle
+        );
 
-        if (input.dash && this.dashCooldown <= 0 && moveVector.lengthSquared() > 0.0001) {
-            this.dashDirection = moveVector.clone().normalize();
+        if (worldMove.lengthSquared() > 0.0001) {
+            this.facingAngle = Math.atan2(worldMove.x, worldMove.z);
+        }
+
+        const targetVelocity = worldMove.scale(this.stats.speed * (input.sprint ? 1.45 : 1));
+
+        if (input.dash && this.dashCooldown <= 0 && worldMove.lengthSquared() > 0.0001) {
+            this.dashDirection = worldMove.clone().normalize();
             this.dashTimer = 0.18;
             this.dashCooldown = 0.95;
         }
@@ -118,7 +131,7 @@ export class Player {
         this.mesh.scaling.setAll(headScale);
 
         const velocityStrength = Math.min(1, this.velocity.length() / Math.max(1, this.stats.speed));
-        this.mesh.rotation.y = Math.atan2(this.velocity.x, this.velocity.z || 0.0001);
+        this.mesh.rotation.y = this.facingAngle;
         this.mesh.rotation.x = Math.sin(performance.now() * 0.004) * 0.04 * velocityStrength;
 
         // Update color based on level

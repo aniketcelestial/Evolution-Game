@@ -214,7 +214,7 @@ export class Game {
         // Initialize map view
         try {
             this.mapView = new MapView('map-view');
-            this.mapView.show();
+            this.mapView.hide();
         } catch (e) {
             console.warn('Map view not available:', e);
         }
@@ -468,19 +468,9 @@ export class Game {
             interact = interact || touchActions.interact;
         }
 
-        const camera = this.scene3D?.getCamera();
-        const alpha = camera?.alpha ?? 0;
-        const forwardVector = new BABYLON.Vector3(-Math.sin(alpha), 0, -Math.cos(alpha));
-        const rightVector = new BABYLON.Vector3(-forwardVector.z, 0, forwardVector.x);
-        const worldMove = rightVector.scale(strafe).add(forwardVector.scale(forward));
-
-        if (worldMove.lengthSquared() > 1) {
-            worldMove.normalize();
-        }
-
         return {
-            moveX: worldMove.x,
-            moveY: worldMove.z,
+            moveX: strafe,
+            moveY: forward,
             sprint,
             dash,
             interact,
