@@ -109,7 +109,11 @@ export class Player {
 
         this.velocity = BABYLON.Vector3.Lerp(this.velocity, targetVelocity, Math.min(1, deltaTime * 8));
         this.position.addInPlace(this.velocity.scale(deltaTime));
-        this.pushTrailPoint();
+
+        // Only extend the trail while moving; otherwise the body would collapse into the head.
+        if (this.velocity.lengthSquared() > 0.0001) {
+            this.pushTrailPoint();
+        }
 
         // Boundary constraints
         this.position.x = Math.max(-100, Math.min(100, this.position.x));
@@ -151,8 +155,14 @@ export class Player {
         const swayPhase = performance.now() * 0.006;
         const velocityStrength = Math.min(1, this.velocity.length() / Math.max(1, this.stats.speed));
 
-        // Compute forward direction from facingAngle
-        const forward = new BABYLON.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
+        // Compute forward direction from facingAngle; fallback to camera facing if idle.
+        let forward = new BABYLON.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
+        if (forward.lengthSquared() < 0.0001) {
+            forward = new BABYLON.Vector3(Math.sin(this.camera.alpha), 0, Math.cos(this.camera.alpha));
+        }
+        if (forward.lengthSquared() > 0.0001) {
+            forward.normalize();
+        }
 
         for (let i = 0; i < this.bodySegments.length; i++) {
             const segment = this.bodySegments[i];

@@ -2,7 +2,8 @@ import * as BABYLON from '@babylonjs/core';
 
 export class Food {
     public position: BABYLON.Vector3;
-    public radius: number = 0.2;
+    public radius: number = 0.45;
+    public pickupRadius: number = 1.4;
     public nutrition: number = 10;
     
     private mesh: BABYLON.Mesh;
@@ -14,22 +15,22 @@ export class Food {
 
         // Create a simple mushroom: cap (sphere) + stalk (cylinder) grouped under a transform node
         const root = new BABYLON.TransformNode('food-mushroom-root', this.scene);
-        const cap = BABYLON.MeshBuilder.CreateSphere('mushroom-cap', { diameter: this.radius * 3, segments: 16 }, this.scene);
+        const cap = BABYLON.MeshBuilder.CreateSphere('mushroom-cap', { diameter: this.radius * 4.4, segments: 16 }, this.scene);
         cap.scaling.y = 0.6;
         const capMat = new BABYLON.StandardMaterial('mushroom-cap-mat', this.scene);
         capMat.diffuseColor = BABYLON.Color3.FromHexString('#ff7fb3');
         capMat.emissiveColor = BABYLON.Color3.FromHexString('#ff6ba3');
         cap.material = capMat;
 
-        const stalk = BABYLON.MeshBuilder.CreateCylinder('mushroom-stalk', { diameterTop: this.radius * 0.6, diameterBottom: this.radius * 0.8, height: this.radius * 1.6, tessellation: 12 }, this.scene);
+        const stalk = BABYLON.MeshBuilder.CreateCylinder('mushroom-stalk', { diameterTop: this.radius * 0.85, diameterBottom: this.radius * 1.05, height: this.radius * 2.3, tessellation: 12 }, this.scene);
         const stalkMat = new BABYLON.StandardMaterial('mushroom-stalk-mat', this.scene);
         stalkMat.diffuseColor = BABYLON.Color3.FromHexString('#efe1c6');
         stalk.material = stalkMat;
 
         cap.parent = root;
         stalk.parent = root;
-        cap.position.y = this.radius * 0.8;
-        stalk.position.y = this.radius * 0.0;
+        cap.position.y = this.radius * 1.05;
+        stalk.position.y = this.radius * 0.05;
 
         root.position.copyFrom(this.position);
         this.mesh = root as unknown as BABYLON.Mesh;

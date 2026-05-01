@@ -28,8 +28,9 @@ export class CombatSystem {
         for (let i = this.foods.length - 1; i >= 0; i--) {
             const food = this.foods[i];
             const distance = BABYLON.Vector3.Distance(playerPos, food.position);
+            const pickupRadius = (food as Food & { pickupRadius?: number }).pickupRadius ?? food.radius * 2.5;
 
-            if (distance < playerRadius + food.radius) {
+            if (distance < playerRadius + pickupRadius) {
                 this.player.eat(food.nutrition);
                 this.foodManager.removeFood(food);
                 this.foods.splice(i, 1);
@@ -68,13 +69,14 @@ export class CombatSystem {
 
     public triggerInteraction(): void {
         const playerPos = this.player.getPosition();
-        const interactionRange = this.player.getRadius() * 5 + 3;
+        const interactionRange = this.player.getRadius() * 5 + 5;
 
         let nearestFood: Food | null = null;
         let nearestFoodDistance = Infinity;
         for (const food of this.foods) {
+            const pickupRadius = (food as Food & { pickupRadius?: number }).pickupRadius ?? food.radius * 2.5;
             const distance = BABYLON.Vector3.Distance(playerPos, food.position);
-            if (distance < interactionRange && distance < nearestFoodDistance) {
+            if (distance < interactionRange + pickupRadius && distance < nearestFoodDistance) {
                 nearestFood = food;
                 nearestFoodDistance = distance;
             }
