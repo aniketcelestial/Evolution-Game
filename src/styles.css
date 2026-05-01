@@ -807,6 +807,39 @@ html, body {
     }
 }
 
+/* Fix action panel and map overflow in narrow landscape (phone browsers) */
+@media (max-width: 900px) and (orientation: landscape) {
+    .mobile-action-panel {
+        right: 10px;
+        bottom: 10px;
+        gap: 0.5rem;
+        max-width: 46vw;
+        flex-wrap: wrap;
+    }
+
+    .action-button {
+        min-width: 56px;
+        padding: 0.5rem;
+        font-size: 0.78rem;
+        border-radius: 12px;
+    }
+
+    .map-view-container {
+        right: 10px;
+        top: 10px;
+        bottom: auto;
+        width: min(180px, 34vw);
+        max-height: 40vh;
+        overflow: hidden;
+    }
+
+    .map-canvas {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+}
+
 
 /* Landscape mode adjustments */
 @media (max-width: 800px) and (max-height: 500px) {

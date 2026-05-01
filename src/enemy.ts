@@ -16,27 +16,72 @@ export class Enemy {
     public radius: number = 0.5;
     public stats: EnemyStats;
     public age: number = 0;
+    public species: string = 'generic';
+    public actionPoints: number = 1;
     
     private mesh: BABYLON.Mesh;
     private scene: BABYLON.Scene;
     private targetPosition: BABYLON.Vector3;
     private moveTimer: number = 0;
 
-    constructor(scene: BABYLON.Scene, position: BABYLON.Vector3, level: number) {
+    constructor(scene: BABYLON.Scene, position: BABYLON.Vector3, level: number, species?: string) {
         this.scene = scene;
         this.position = position.clone();
         this.velocity = BABYLON.Vector3.Zero();
         this.targetPosition = position.clone();
 
-        // Generate enemy stats based on level
+        // choose species randomly if not provided
+        const speciesList = ['ant', 'slither', 'bee', 'snake'];
+        this.species = species || speciesList[Math.floor(Math.random() * speciesList.length)];
+
+        // Generate base enemy stats based on level
         const levelFactor = 1 + (level - 1) * 0.2;
+        let baseHealth = 50 * levelFactor;
+        let baseSpeed = 8 + level * 0.5;
+        let baseAttack = 5 + level * 1.5;
+        let size = 0.8 + level * 0.1;
+
+        // species modifiers
+        switch (this.species) {
+            case 'ant':
+                baseHealth *= 0.9;
+                baseSpeed *= 1.6;
+                baseAttack *= 1.2;
+                this.actionPoints = 3;
+                size *= 0.7;
+                break;
+            case 'slither':
+                baseHealth *= 1.0;
+                baseSpeed *= 1.0;
+                baseAttack *= 1.1;
+                this.actionPoints = 2;
+                size *= 1.1;
+                break;
+            case 'bee':
+                baseHealth *= 0.7;
+                baseSpeed *= 2.2;
+                baseAttack *= 0.8;
+                this.actionPoints = 4;
+                size *= 0.6;
+                break;
+            case 'snake':
+                baseHealth *= 1.6;
+                baseSpeed *= 0.9;
+                baseAttack *= 2.2;
+                this.actionPoints = 1;
+                size *= 1.25;
+                break;
+            default:
+                this.actionPoints = 2;
+        }
+
         this.stats = {
             level: level,
-            health: 50 * levelFactor,
-            maxHealth: 50 * levelFactor,
-            size: 0.8 + level * 0.1,
-            speed: 8 + level * 0.5,
-            attack: 5 + level * 1.5,
+            health: baseHealth,
+            maxHealth: baseHealth,
+            size: size,
+            speed: baseSpeed,
+            attack: baseAttack,
             experienceReward: 50 * levelFactor,
         };
 
@@ -45,12 +90,47 @@ export class Enemy {
     }
 
     private createMesh(): BABYLON.Mesh {
-        const mesh = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
-        const material = new BABYLON.StandardMaterial('enemy-material', this.scene);
-        material.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
-        material.emissiveColor = BABYLON.Color3.FromHexString('#990000');
-        material.specularColor = BABYLON.Color3.FromHexString('#442222');
-        mesh.material = material;
+        // Different visuals per species
+        let mesh: BABYLON.Mesh;
+        const mat = new BABYLON.StandardMaterial('enemy-material', this.scene);
+
+        switch (this.species) {
+            case 'ant':
+                mesh = BABYLON.MeshBuilder.CreateCylinder('enemy-ant', { diameterTop: this.radius * 0.8, diameterBottom: this.radius * 0.8, height: this.radius * 1.4, tessellation: 12 }, this.scene);
+                mat.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
+                mat.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
+                break;
+            case 'bee':
+                mesh = BABYLON.MeshBuilder.CreateSphere('enemy-bee', { diameter: this.radius * 1.2, segments: 12 }, this.scene);
+                mat.diffuseColor = BABYLON.Color3.FromHexString('#ffd24d');
+                mat.emissiveColor = BABYLON.Color3.FromHexString('#ffb600');
+                // small wings
+                const wingL = BABYLON.MeshBuilder.CreateBox('wingL', { width: this.radius * 0.4, height: 0.02, depth: this.radius * 0.8 }, this.scene);
+                const wingR = wingL.clone('wingR');
+                wingL.position.set(-this.radius * 0.4, 0.1, 0);
+                wingR.position.set(this.radius * 0.4, 0.1, 0);
+                wingL.parent = mesh;
+                wingR.parent = mesh;
+                break;
+            case 'slither':
+                mesh = BABYLON.MeshBuilder.CreateSphere('enemy-slither', { diameter: this.radius * 1.4, segments: 12 }, this.scene);
+                mat.diffuseColor = BABYLON.Color3.FromHexString('#2aa65b');
+                mat.emissiveColor = BABYLON.Color3.FromHexString('#188a3b');
+                mesh.scaling.x = 1.8;
+                mesh.scaling.z = 0.9;
+                break;
+            case 'snake':
+                mesh = BABYLON.MeshBuilder.CreateTorus('enemy-snake', { diameter: this.radius * 1.4, thickness: this.radius * 0.35, tessellation: 24 }, this.scene);
+                mat.diffuseColor = BABYLON.Color3.FromHexString('#8b2b2b');
+                mat.emissiveColor = BABYLON.Color3.FromHexString('#5a1a1a');
+                break;
+            default:
+                mesh = BABYLON.MeshBuilder.CreateIcoSphere('enemy', { radius: this.radius, subdivisions: 2 }, this.scene);
+                mat.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
+                mat.emissiveColor = BABYLON.Color3.FromHexString('#990000');
+        }
+
+        mesh.material = mat;
         mesh.receiveShadows = true;
         return mesh;
     }
@@ -95,15 +175,32 @@ export class Enemy {
 
     private updateMesh(): void {
         this.mesh.position.copyFrom(this.position);
-        this.mesh.scaling.setAll(this.stats.size);
+        // scale by species-aware size
+        this.mesh.scaling = new BABYLON.Vector3(this.stats.size, this.stats.size, this.stats.size);
 
-        // Color based on level (red shades)
-        const saturation = 0.7 + (this.stats.level / 30) * 0.3;
-        const lightness = 0.4 + (this.stats.level / 30) * 0.1;
-        const color = BABYLON.Color3.FromHSV(0, saturation, lightness);
+        // Color variations per species
         const material = this.mesh.material as BABYLON.StandardMaterial;
-        material.diffuseColor = color;
-        material.emissiveColor = color.scale(0.55);
+        switch (this.species) {
+            case 'ant':
+                material.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
+                material.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
+                break;
+            case 'bee':
+                material.diffuseColor = BABYLON.Color3.FromHexString('#ffd24d');
+                material.emissiveColor = BABYLON.Color3.FromHexString('#ffb600');
+                break;
+            case 'slither':
+                material.diffuseColor = BABYLON.Color3.FromHexString('#2aa65b');
+                material.emissiveColor = BABYLON.Color3.FromHexString('#188a3b');
+                break;
+            case 'snake':
+                material.diffuseColor = BABYLON.Color3.FromHexString('#8b2b2b');
+                material.emissiveColor = BABYLON.Color3.FromHexString('#5a1a1a');
+                break;
+            default:
+                material.diffuseColor = BABYLON.Color3.FromHexString('#ff4444');
+                material.emissiveColor = BABYLON.Color3.FromHexString('#990000');
+        }
     }
 
     public takeDamage(amount: number): void {

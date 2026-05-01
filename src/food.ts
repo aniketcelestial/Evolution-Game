@@ -12,14 +12,30 @@ export class Food {
         this.scene = scene;
         this.position = position.clone();
 
-        this.mesh = BABYLON.MeshBuilder.CreateSphere('food', { diameter: this.radius * 2, segments: 10 }, this.scene);
-        const material = new BABYLON.StandardMaterial('food-material', this.scene);
-        material.diffuseColor = BABYLON.Color3.FromHexString('#ffaa00');
-        material.emissiveColor = BABYLON.Color3.FromHexString('#ff8800');
-        material.specularColor = BABYLON.Color3.FromHexString('#553300');
-        this.mesh.material = material;
-        this.mesh.position.copyFrom(this.position);
-        this.mesh.receiveShadows = true;
+        // Create a simple mushroom: cap (sphere) + stalk (cylinder) grouped under a transform node
+        const root = new BABYLON.TransformNode('food-mushroom-root', this.scene);
+        const cap = BABYLON.MeshBuilder.CreateSphere('mushroom-cap', { diameter: this.radius * 3, segments: 16 }, this.scene);
+        cap.scaling.y = 0.6;
+        const capMat = new BABYLON.StandardMaterial('mushroom-cap-mat', this.scene);
+        capMat.diffuseColor = BABYLON.Color3.FromHexString('#ff7fb3');
+        capMat.emissiveColor = BABYLON.Color3.FromHexString('#ff6ba3');
+        cap.material = capMat;
+
+        const stalk = BABYLON.MeshBuilder.CreateCylinder('mushroom-stalk', { diameterTop: this.radius * 0.6, diameterBottom: this.radius * 0.8, height: this.radius * 1.6, tessellation: 12 }, this.scene);
+        const stalkMat = new BABYLON.StandardMaterial('mushroom-stalk-mat', this.scene);
+        stalkMat.diffuseColor = BABYLON.Color3.FromHexString('#efe1c6');
+        stalk.material = stalkMat;
+
+        cap.parent = root;
+        stalk.parent = root;
+        cap.position.y = this.radius * 0.8;
+        stalk.position.y = this.radius * 0.0;
+
+        root.position.copyFrom(this.position);
+        this.mesh = root as unknown as BABYLON.Mesh;
+        // mark receiveShadows on children
+        cap.receiveShadows = true;
+        stalk.receiveShadows = true;
     }
 
     public dispose(): void {

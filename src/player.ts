@@ -18,6 +18,8 @@ export class Player {
     public facingAngle: number = 0;
     public radius: number = 0.5; // Starts tiny
     public stats: PlayerStats;
+    private segmentsGrown: number = 0;
+    private evolved: boolean = false;
     
     private mesh: BABYLON.Mesh;
     private bodySegments: BABYLON.Mesh[] = [];
@@ -147,29 +149,86 @@ export class Player {
     private updateBodySegments(color: BABYLON.Color3): void {
         const spacing = 7;
         const swayPhase = performance.now() * 0.006;
+        const velocityStrength = Math.min(1, this.velocity.length() / Math.max(1, this.stats.speed));
+
+        // Compute forward direction from facingAngle
+        const forward = new BABYLON.Vector3(Math.sin(this.facingAngle), 0, Math.cos(this.facingAngle));
 
         for (let i = 0; i < this.bodySegments.length; i++) {
             const segment = this.bodySegments[i];
             const trailIndex = Math.min(this.trailPoints.length - 1, i * spacing + 1);
-            const target = this.trailPoints[trailIndex] || this.position;
-            const nextTarget = this.trailPoints[Math.min(this.trailPoints.length - 1, trailIndex + 1)] || target;
-            const followDirection = target.subtract(nextTarget);
-            const lateralOffset = Math.sin(swayPhase + i * 0.45) * (0.12 + i * 0.01);
+            const trailTarget = this.trailPoints[trailIndex];
+
+            // When moving, prefer trail-following. When idle, build a resting slither using forward offsets.
+            let target: BABYLON.Vector3;
+            if (trailTarget && (this.velocity.lengthSquared() > 0.0001 || this.trailPoints.some(p => !p.equals(this.position)))) {
+                target = trailTarget;
+            } else {
+                // resting layout along forward vector
+                const distance = (i + 1) * (0.4 + this.stats.size * 0.05);
+                target = this.position.add(forward.scale(-distance));
+            }
+
+            // Sway oscillation: larger when idle
+            const idleFactor = 1 - velocityStrength;
+            const lateralOffset = Math.sin(swayPhase + i * 0.45) * (0.18 * idleFactor + velocityStrength * 0.06 + i * 0.005);
+            const verticalOffset = Math.cos(swayPhase + i * 0.35) * (0.06 * idleFactor + 0.02 * velocityStrength);
 
             segment.position.copyFrom(target);
-            segment.position.x += lateralOffset;
-            segment.position.y = target.y + Math.cos(swayPhase + i * 0.35) * 0.08;
-            segment.scaling.setAll(Math.max(0.35, (this.stats.size * 0.9) * (1 - i / (this.bodySegments.length * 1.15))));
+            // apply lateral offset perpendicular to forward
+            const lateral = new BABYLON.Vector3(-forward.z, 0, forward.x).scale(lateralOffset);
+            segment.position.addInPlace(lateral);
+            segment.position.y = target.y + verticalOffset;
 
-            if (followDirection.lengthSquared() > 0.0001) {
-                segment.rotation.y = Math.atan2(followDirection.x, followDirection.z || 0.0001);
-            }
+            const scaleFactor = Math.max(0.28, (this.stats.size * 0.9) * (1 - i / (this.bodySegments.length * 1.15)));
+            segment.scaling.setAll(scaleFactor);
+
+            // rotate segment to follow forward direction
+            segment.rotation.y = Math.atan2(forward.x, forward.z || 0.0001);
 
             const segmentMaterial = segment.material as BABYLON.StandardMaterial;
             const fade = 1 - i / (this.bodySegments.length + 2);
             segmentMaterial.diffuseColor = BABYLON.Color3.Lerp(color, BABYLON.Color3.FromHexString('#05250c'), 1 - fade * 0.9);
             segmentMaterial.emissiveColor = color.scale(0.2 * fade);
         }
+    }
+
+    private addSegment(): void {
+        const idx = this.bodySegments.length;
+        const segment = BABYLON.MeshBuilder.CreateSphere(`player-segment-grow-${idx}`, { diameter: this.radius * 1.8, segments: 18 }, this.scene);
+        const segmentMaterial = new BABYLON.StandardMaterial(`player-segment-material-grow-${idx}`, this.scene);
+        segmentMaterial.diffuseColor = BABYLON.Color3.FromHexString('#00ff00');
+        segmentMaterial.emissiveColor = BABYLON.Color3.FromHexString('#003b10');
+        segmentMaterial.specularColor = BABYLON.Color3.FromHexString('#112211');
+        segment.material = segmentMaterial;
+        segment.receiveShadows = true;
+        this.bodySegments.push(segment);
+
+        // increase trail buffer so segments have places to follow
+        for (let i = 0; i < 8; i++) {
+            this.trailPoints.push(this.position.clone());
+        }
+    }
+
+    private evolveToAnt(): void {
+        if (this.evolved) return;
+        this.evolved = true;
+        // Change appearance: darker, smaller segments, faster/stronger
+        const headMaterial = this.mesh.material as BABYLON.StandardMaterial;
+        headMaterial.diffuseColor = BABYLON.Color3.FromHexString('#6b3b1a');
+        headMaterial.emissiveColor = BABYLON.Color3.FromHexString('#4a2a12');
+
+        // adjust stats for ant form
+        this.stats.attack += 15;
+        this.stats.speed += 4;
+        this.stats.maxHealth += 30;
+        this.stats.health = Math.min(this.stats.maxHealth, this.stats.health + 30);
+
+        // scale segments to look like an ant body (more tapered)
+        this.bodySegments.forEach((s, i) => {
+            const sf = 0.35 * (1 - i / Math.max(1, this.bodySegments.length));
+            s.scaling.setAll(sf);
+        });
     }
 
     private updateCamera(): void {
@@ -223,6 +282,18 @@ export class Player {
     public eat(amount: number): void {
         this.heal(amount);
         this.addExperience(amount * 0.5);
+        // Grow based on nutrition: 1 segment per ~5 nutrition
+        const grows = Math.floor(amount / 5);
+        for (let i = 0; i < Math.max(1, grows); i++) {
+            this.addSegment();
+            this.segmentsGrown += 1;
+        }
+
+        // Evolve when grown enough segments
+        const evolveThreshold = 10; // configurable threshold
+        if (!this.evolved && this.segmentsGrown >= evolveThreshold) {
+            this.evolveToAnt();
+        }
     }
 
     public isAlive(): boolean {
