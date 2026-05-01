@@ -440,6 +440,7 @@ html, body, #canvas-container {
         right: 10px;
         flex-direction: column;
         gap: 0.4rem;
+        align-items: flex-end;
     }
 
     .btn-small {
@@ -449,18 +450,20 @@ html, body, #canvas-container {
     }
 
     .map-btn {
-        bottom: 92px;
-        left: 50%;
-        right: auto;
-        transform: translateX(-50%);
+        top: 10px;
+        right: 10px;
+        bottom: auto;
+        left: auto;
+        transform: none;
         padding: 0.55rem 0.8rem;
         font-size: 0.78rem;
     }
 
     .map-view-container {
         right: 10px;
-        bottom: 170px;
-        width: min(180px, 44vw);
+        top: 110px;
+        bottom: auto;
+        width: min(200px, 46vw);
     }
 
     .map-canvas {
@@ -731,18 +734,37 @@ html, body, #canvas-container {
     .mobile-action-panel {
         bottom: 12px;
         right: 12px;
-        flex-direction: column;
-        gap: 0.5rem;
+        flex-direction: row;
+        gap: 0.45rem;
     }
 
     .action-button {
-        min-width: 72px;
-        padding: 0.7rem 0.85rem;
-        font-size: 0.75rem;
+        min-width: 68px;
+        width: 68px;
+        height: 68px;
+        padding: 0.45rem;
+        font-size: 0.68rem;
+        border-radius: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.15rem;
+        text-transform: none;
+    }
+
+    .action-icon {
+        font-size: 1.2rem;
+        line-height: 1;
+    }
+
+    .action-label {
+        font-size: 0.62rem;
+        line-height: 1;
     }
 
     .map-view-container.active {
-        width: min(170px, 48vw);
+        width: min(190px, 46vw);
     }
 }
 
@@ -754,6 +776,66 @@ html, body, #canvas-container {
     .map-view-container.active {
         display: block;
     }
+}
+
+@media (max-width: 900px) and (orientation: portrait) {
+    .rotate-device-overlay {
+        display: flex;
+    }
+
+    .screen,
+    .hud,
+    .joystick-container,
+    .mobile-action-panel,
+    .mobile-btn,
+    .map-view-container {
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+    .rotate-device-overlay {
+        display: none;
+    }
+
+    .hud-stats {
+        max-width: 48vw;
+    }
+}
+
+.rotate-device-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    background: radial-gradient(circle at center, rgba(0, 212, 255, 0.16), rgba(5, 8, 20, 0.96));
+    color: #e8fbff;
+}
+
+.rotate-device-card {
+    max-width: 320px;
+    padding: 1.5rem 1.25rem;
+    border-radius: 18px;
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    background: rgba(10, 18, 38, 0.82);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.rotate-device-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+}
+
+.rotate-device-text {
+    font-size: 0.95rem;
+    color: #b9d7e4;
+    line-height: 1.5;
 }
 
 /* Landscape mode adjustments */

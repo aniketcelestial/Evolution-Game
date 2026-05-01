@@ -83,27 +83,19 @@ export class Player {
     public update(deltaTime: number, input: PlayerControlInput): void {
         this.dashCooldown = Math.max(0, this.dashCooldown - deltaTime);
 
-        const localMove = new BABYLON.Vector3(input.moveX, 0, input.moveY);
-        if (localMove.lengthSquared() > 1) {
-            localMove.normalize();
+        const moveVector = new BABYLON.Vector3(input.moveX, 0, input.moveY);
+        if (moveVector.lengthSquared() > 1) {
+            moveVector.normalize();
         }
 
-        const cosAngle = Math.cos(this.facingAngle);
-        const sinAngle = Math.sin(this.facingAngle);
-        const worldMove = new BABYLON.Vector3(
-            localMove.x * cosAngle + localMove.z * sinAngle,
-            0,
-            -localMove.x * sinAngle + localMove.z * cosAngle
-        );
-
-        if (worldMove.lengthSquared() > 0.0001) {
-            this.facingAngle = Math.atan2(worldMove.x, worldMove.z);
+        if (moveVector.lengthSquared() > 0.0001) {
+            this.facingAngle = Math.atan2(moveVector.x, moveVector.z);
         }
 
-        const targetVelocity = worldMove.scale(this.stats.speed * (input.sprint ? 1.45 : 1));
+        const targetVelocity = moveVector.scale(this.stats.speed * (input.sprint ? 1.45 : 1));
 
-        if (input.dash && this.dashCooldown <= 0 && worldMove.lengthSquared() > 0.0001) {
-            this.dashDirection = worldMove.clone().normalize();
+        if (input.dash && this.dashCooldown <= 0 && moveVector.lengthSquared() > 0.0001) {
+            this.dashDirection = moveVector.clone().normalize();
             this.dashTimer = 0.18;
             this.dashCooldown = 0.95;
         }

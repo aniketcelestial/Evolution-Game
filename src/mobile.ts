@@ -60,9 +60,18 @@ export class MobileControls {
         panel.id = 'mobile-action-panel';
         panel.className = 'mobile-action-panel';
         panel.innerHTML = `
-            <button id="sprint-button" class="action-button sprint-button">Sprint</button>
-            <button id="dash-button" class="action-button dash-button">Dash</button>
-            <button id="action-button" class="action-button action-button-main">Action</button>
+            <button id="sprint-button" class="action-button sprint-button" aria-label="Sprint">
+                <span class="action-icon">🏃</span>
+                <span class="action-label">Sprint</span>
+            </button>
+            <button id="dash-button" class="action-button dash-button" aria-label="Dash">
+                <span class="action-icon">↗</span>
+                <span class="action-label">Jump</span>
+            </button>
+            <button id="action-button" class="action-button action-button-main" aria-label="Action">
+                <span class="action-icon">👊</span>
+                <span class="action-label">Punch</span>
+            </button>
         `;
         document.body.appendChild(panel);
         return panel;

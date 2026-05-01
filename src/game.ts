@@ -468,9 +468,19 @@ export class Game {
             interact = interact || touchActions.interact;
         }
 
+        const camera = this.scene3D?.getCamera();
+        const alpha = camera?.alpha ?? 0;
+        const forwardVector = new BABYLON.Vector3(-Math.sin(alpha), 0, -Math.cos(alpha));
+        const rightVector = new BABYLON.Vector3(forwardVector.z, 0, -forwardVector.x);
+        const worldMove = rightVector.scale(strafe).add(forwardVector.scale(forward));
+
+        if (worldMove.lengthSquared() > 1) {
+            worldMove.normalize();
+        }
+
         return {
-            moveX: strafe,
-            moveY: forward,
+            moveX: worldMove.x,
+            moveY: worldMove.z,
             sprint,
             dash,
             interact,
